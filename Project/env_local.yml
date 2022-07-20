@@ -7,12 +7,7 @@ dependencies:
   - pytorch
   - numpy
   - scipy
-  - torchvision
-  - torchtext
-  - gzip
-  - pickle
   - pip
   - pip:
-    - sentencepiece
-    - sacrebleu
-    - tensorboard
+    - torchvision
+    - torchtext

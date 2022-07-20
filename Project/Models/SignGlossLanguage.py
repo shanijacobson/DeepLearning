@@ -3,7 +3,7 @@ import torch
 import os
 import gzip
 import pickle
-import Project.Models.Vocabulary as vocab
+from  Project.Models import Vocabulary
 
 from torch import Tensor
 from torchvision.datasets import VisionDataset
@@ -29,7 +29,7 @@ class SignGlossSample:
 
 class SignGlossLanguage(VisionDataset):
     source_url = "http://cihancamgoz.com/files/cvpr2020"
-    train_files_list = [("train", "phoenix14t.pami0.train"),
+    train_files_list = [
                         ("dev", "phoenix14t.pami0.dev")]
     test_files_list = [("test", "phoenix14t.pami0.test"), ]
 
@@ -78,8 +78,8 @@ class SignGlossLanguage(VisionDataset):
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
-        glosses = sample.glosses + [vocab.PAD_TOKEN] * (self.max_glosses - len(sample.glosses))
-        target = sample.words + [vocab.PAD_TOKEN] * (self.max_words - len(sample.words))
+        glosses = sample.glosses + [Vocabulary.PAD_TOKEN] * (self.max_glosses - len(sample.glosses))
+        target = sample.words + [Vocabulary.PAD_TOKEN] * (self.max_words - len(sample.words))
         video = torch.cat([sample.signs_frames, torch.zeros(self.max_signs_frames - sample.signs_frames.shape[0], self.frame_size)], axis=0)
         if self.transform is not None:
             video = self.transform(video)
