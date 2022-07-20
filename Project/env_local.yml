@@ -1,0 +1,18 @@
+name: project_local
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.8
+  - pytorch
+  - numpy
+  - scipy
+  - torchvision
+  - torchtext
+  - gzip
+  - pickle
+  - pip
+  - pip:
+    - sentencepiece
+    - sacrebleu
+    - tensorboard
