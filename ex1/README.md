@@ -9,7 +9,7 @@ Train models:
     - Next run the code according to the wanted techniques (i.e. Original, Dropout, Weight Decay, or Bath Normalization)
     - It is possible to run all the blocks under "Train Models".
     - The Trained models are saved under "./Models/%" where % is the name of the selected mode.
-    - The graphs are saved under "./ex1_313581803_314882861/Results/%" with the relevant hyperparameters as the name of the graph. Evaluate performance of existing models
+    - The graphs are saved under "./Results/%" with the relevant hyperparameters as the name of the graph. Evaluate performance of existing models
     - Under "Train Models" run the first block.
     - In order to evaluate the results of the different existing models on the train and test dataset, run the code block under “Evaluation”.
 
