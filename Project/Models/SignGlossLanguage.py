@@ -3,7 +3,7 @@ import torch
 import os
 import gzip
 import pickle
-from  Project.Models import Vocabulary
+from  Models import Vocabulary
 
 from torch import Tensor
 from torchvision.datasets import VisionDataset
