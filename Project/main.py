@@ -13,9 +13,14 @@ def train_batch(batch):
     pass
 
 
-def train_model():
+def initialize():
     if not os.path.exists(DATA_PATH):
         os.makedirs(DATA_PATH)
+    if not os.path.exists(os.path.join("Data", "models")):
+        os.makedirs(os.path.join("Data", "models"))
+
+def train_model():
+    initialize()
 
     # Build Vocabularies:
     gloss_vocab = GlossVocabulary(DATA_PATH)
@@ -32,8 +37,7 @@ def train_model():
     # Data Loaders:
     train_loader = DataLoader(train_dataset, BATCH_SIZE, shuffle=True)
     validation_loader = DataLoader(valid_dataset, BATCH_SIZE, shuffle=True)
-    # test_loader = DataLoader(test_dataset, BATCH_SIZE, shuffle=False)
-
+    test_loader = DataLoader(test_dataset, BATCH_SIZE, shuffle=False)
     return train_loader, gloss_vocab, word_vocab
 
 

@@ -1,4 +1,6 @@
 from collections import Counter, OrderedDict
+
+import torch
 from torchtext import vocab
 import gzip
 import os
@@ -11,8 +13,6 @@ UNK_TOKEN = "<unk>"
 
 
 class GlossVocabulary(vocab.Vocab):
-    save_path = ""
-
     def __init__(self, root):
         self.root = root
         vocabulary = build_vocab_from_data(root, "gloss")
@@ -22,8 +22,6 @@ class GlossVocabulary(vocab.Vocab):
 
 
 class WordVocabulary(vocab.Vocab):
-    save_path = ""
-
     def __init__(self, root):
         self.root = root
         vocabulary = build_vocab_from_data(root, "text")
@@ -33,6 +31,11 @@ class WordVocabulary(vocab.Vocab):
 
 
 def build_vocab_from_data(root, key, min_freq=1) -> vocab.Vocab:
+    path = os.path.join("Data", "models", f"{key}_vocabulary")
+    if os.path.exists(path):
+        print(f"Getting existing vocabulary: {key}")
+        return torch.load(path)
+
     counter = Counter()
     source_list = ["phoenix14t.pami0.train", "phoenix14t.pami0.dev", "phoenix14t.pami0.test"]
 
@@ -42,4 +45,6 @@ def build_vocab_from_data(root, key, min_freq=1) -> vocab.Vocab:
             for sample in loaded_object:
                 counter.update(sample[key].split(' '))
     ordered_dict = OrderedDict(sorted(counter.items(), key=lambda x: (-x[1], x[0])))
-    return vocab.vocab(ordered_dict, min_freq=min_freq)
+    vocabulary = vocab.vocab(ordered_dict, min_freq=min_freq)
+    torch.save(vocabulary, path)
+    return vocabulary
