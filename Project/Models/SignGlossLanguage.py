@@ -4,36 +4,29 @@ import os
 import gzip
 import pickle
 from Models import Vocabulary
-from torch import Tensor
 from torchvision.datasets import VisionDataset
 
 
 class SignGlossSample:
 
-    def __init__(self, name, singer, gloss, text):
+    def __init__(self, name, singer, glosses, words, signs_frames):
         self.name = name
         self.singer = singer
-        self.glosses = gloss.strip().split(' ')
-        self.words = text.strip().split(' ')
-        self.signs_frames: Tensor = torch.Tensor([])
-
-    def add_sign_frame(self, frame):
-        if frame["name"] != self.name:
-            raise RuntimeError(f"Frame name is different then sample name.")
-        if frame["signer"] != self.singer or frame["gloss"].strip().split(' ') != self.glosses or frame["text"].strip().split(' ') != self.words:
-            raise RuntimeError(f"Sample {self.name} has some mishmash. Please check.")
-        new_frame = frame["sign"] + 1e-8  # stability
-        self.signs_frames = torch.cat([new_frame, self.signs_frames], axis=1)
+        self.glosses = torch.tensor(glosses, dtype=torch.int)
+        self.words = torch.tensor(words, dtype=torch.int)
+        self.signs_frames = signs_frames + 1e-8  # stability
 
 
 class SignGlossLanguage(VisionDataset):
     source_url = "http://cihancamgoz.com/files/cvpr2020"
-    train_files_list = [
+    train_files_list = [("train", "phoenix14t.pami0.train"),
                         ("dev", "phoenix14t.pami0.dev")]
     test_files_list = [("test", "phoenix14t.pami0.test"), ]
 
     def __init__(self,
                  root: str,
+                 gloss_vocab: Vocabulary.GlossVocabulary,
+                 word_vocab: Vocabulary.WordVocabulary,
                  train: bool = True,
                  download: bool = False,
                  transform: Optional[Callable] = None,
@@ -55,31 +48,14 @@ class SignGlossLanguage(VisionDataset):
 
         if not self._check_integrity():
             raise RuntimeError("Dataset not found or corrupted. You can use download=True to download it")
-
-        samples = {}
-        for name, source_file in self.source_files_list:
-            with gzip.open(os.path.join(self.root, source_file), "rb") as f:
-                loaded_object = pickle.load(f)
-                for frame in loaded_object:
-                    if frame["name"] not in samples.keys():
-                        samples[frame['name']] = SignGlossSample(
-                            name=frame["name"],
-                            singer=frame["signer"],
-                            gloss=frame["gloss"],
-                            text=frame["text"]
-                        )
-                    sample = samples[frame["name"]]
-                    sample.add_sign_frame(frame)
-                    self.max_glosses = max(self.max_glosses, len(sample.glosses))
-                    self.max_words = max(self.max_words, len(sample.words))
-                    self.max_signs_frames = max(self.max_signs_frames, sample.signs_frames.shape[0])
-        self.data = list(samples.values())
+        self.data = self._parser_data(gloss_vocab.get_stoi(), word_vocab.get_stoi())
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
-        glosses = sample.glosses + [Vocabulary.PAD_TOKEN] * (self.max_glosses - len(sample.glosses))
-        target = sample.words + [Vocabulary.PAD_TOKEN] * (self.max_words - len(sample.words))
-        video = torch.cat([sample.signs_frames, torch.zeros(self.max_signs_frames - sample.signs_frames.shape[0], self.frame_size)], axis=0)
+        glosses = sample.glosses
+        target = sample.words
+        padding = torch.zeros(self.max_signs_frames - sample.signs_frames.shape[0], self.frame_size)
+        video = torch.cat([sample.signs_frames, padding], axis=0)
         if self.transform is not None:
             video = self.transform(video)
 
@@ -100,3 +76,35 @@ class SignGlossLanguage(VisionDataset):
 
     def _check_integrity(self):
         return all(os.path.exists(os.path.join(self.root, file)) for _, file in self.source_files_list)
+
+    def _parser_data(self, gloss_to_idx, word_to_idx):
+        samples = {}
+        for _, source_file in self.source_files_list:
+            with gzip.open(os.path.join(self.root, source_file), "rb") as f:
+                loaded_object = pickle.load(f)
+                for frame in loaded_object:
+                    video_name = frame["name"]
+                    if video_name in samples.keys():
+                        raise RuntimeError(f"Please check {video_name}")
+                    sample = SignGlossSample(
+                        name=video_name,
+                        singer=frame["signer"],
+                        glosses=[gloss_to_idx[g] for g in frame["gloss"].strip().split(' ')],
+                        words=[word_to_idx[w] for w in frame["text"].strip().split(' ')],
+                        signs_frames=frame["sign"]
+                        )
+                    samples[video_name] = sample
+                    self.max_glosses = max(self.max_glosses, len(sample.glosses))
+                    self.max_words = max(self.max_words, len(sample.words))
+                    self.max_signs_frames = max(self.max_signs_frames, sample.signs_frames.shape[0])
+
+        # Padding
+        for sample in samples.values():
+            padding = torch.tensor([gloss_to_idx[Vocabulary.PAD_TOKEN]],
+                                   dtype=torch.int).repeat(self.max_glosses - len(sample.glosses))
+            sample.glosses = torch.cat((sample.glosses, padding), axis=0)
+            padding = torch.tensor([word_to_idx[Vocabulary.PAD_TOKEN]],
+                                   dtype=torch.int).repeat(self.max_words - len(sample.words))
+            sample.words = torch.cat((sample.words, padding), axis=0)
+
+        return list(samples.values())
