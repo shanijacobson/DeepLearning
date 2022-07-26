@@ -3,8 +3,7 @@ import torch
 import os
 import gzip
 import pickle
-from  Models import Vocabulary
-
+from Models import Vocabulary
 from torch import Tensor
 from torchvision.datasets import VisionDataset
 
@@ -101,6 +100,3 @@ class SignGlossLanguage(VisionDataset):
 
     def _check_integrity(self):
         return all(os.path.exists(os.path.join(self.root, file)) for _, file in self.source_files_list)
-
-
-

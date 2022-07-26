@@ -33,6 +33,7 @@ def train_model():
     word_vocab = WordVocabulary(data=total_train_dataset)
     return train_loader, gloss_vocab, word_vocab
 
+
 def test(train_loader, gloss_vocab, word_vocab):
     model = Encoder(1024,3,4,gloss_dim=len(gloss_vocab))
     model = TransformerSLT(1024,3,3,len(gloss_vocab), len(word_vocab),4)
@@ -45,13 +46,12 @@ def test(train_loader, gloss_vocab, word_vocab):
         words = torch.tensor([[word_vocab.get_itos().index(token) for token in sent] for sent in words])
 
        # words = torch.tensor([[[1 if token == elm else 0 for elm in word_vocab.get_itos()] for token in sent] for sent in words])
-        #gloss = gloss.permute(1,0,2) 
+        #gloss = gloss.permute(1,0,2)
         #words = words.permute(1,0,2) 
         model((frame,gloss,words))
 
-    
-
 
 if __name__ == '__main__':
-   train_loader, gloss_vocab, word_vocab =  train_model()
-   test(train_loader,gloss_vocab, word_vocab)
+    train_loader, gloss_vocab, word_vocab = train_model()
+    test(train_loader, gloss_vocab, word_vocab)
+
