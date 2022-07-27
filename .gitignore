@@ -1,4 +1,4 @@
 **/.DS_Store
 .idea/
-/Project/Data/
+**/__pycache__/
 **/Data/

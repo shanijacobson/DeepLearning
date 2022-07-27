@@ -5,16 +5,10 @@ import gzip
 import pickle
 from Models import Vocabulary
 from torchvision.datasets import VisionDataset
+from PIL import Image
+import torchvision.transforms as transforms
 
-
-class SignGlossSample:
-
-    def __init__(self, name, singer, glosses, words, signs_frames):
-        self.name = name
-        self.singer = singer
-        self.glosses = torch.tensor(glosses, dtype=torch.int)
-        self.words = torch.tensor(words, dtype=torch.int)
-        self.signs_frames = signs_frames + 1e-8  # stability
+VIDEO_CURL_COMMAND = "curl 'https://www-i6.informatik.rwth-aachen.de/ftp/pub/rwth-phoenix/2016/phoenix-2014-T.v3.tar.gz' -H 'Connection: keep-alive' --compressed -o data.zip"
 
 
 class SignGlossLanguage(VisionDataset):
@@ -22,6 +16,8 @@ class SignGlossLanguage(VisionDataset):
     train_files_list = [("train", "phoenix14t.pami0.train"),
                         ("dev", "phoenix14t.pami0.dev")]
     test_files_list = [("test", "phoenix14t.pami0.test"), ]
+    original_video_path = os.path.join("Video", "PHOENIX-2014-T-release-v3", "PHOENIX-2014-T",
+                                       "features", "fullFrame-210x260px")
 
     def __init__(self,
                  root: str,
@@ -29,6 +25,7 @@ class SignGlossLanguage(VisionDataset):
                  word_vocab: Vocabulary.WordVocabulary,
                  train: bool = True,
                  download: bool = False,
+                 original_frames: bool = False,
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  max_signs_frames=0,
@@ -37,7 +34,9 @@ class SignGlossLanguage(VisionDataset):
         super().__init__(root, transform=transform, target_transform=target_transform)
         self.root = root
         self.train = train
-        self.frame_size = 1024
+        self.original_frames = original_frames
+        self.frame_size = 260*210 if self.original_frames else 1024
+        self.num_of_channels = 3 if self.original_frames else 1
         self.max_signs_frames = max_signs_frames
         self.max_glosses = max_glosses
         self.max_words = max_words
@@ -52,12 +51,9 @@ class SignGlossLanguage(VisionDataset):
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
-        glosses = sample.glosses
-        target = sample.words
-        padding = torch.zeros(self.max_signs_frames - sample.signs_frames.shape[0], self.frame_size)
-        video = torch.cat([sample.signs_frames, padding], axis=0)
-        if self.transform is not None:
-            video = self.transform(video)
+        glosses = sample["glosses"]
+        target = sample["words"]
+        video = self._get_videos_frame(sample)
 
         if self.target_transform is not None:
             target = self.target_transform(target)
@@ -65,6 +61,24 @@ class SignGlossLanguage(VisionDataset):
 
     def __len__(self) -> int:
         return len(self.data)
+
+    def _get_videos_frame(self, sample):
+        video = torch.Tensor()
+        if self.original_frames:
+            transform = transforms.ToTensor()
+            path = os.path.join(self.root, self.original_video_path, sample["name"])
+            for frame_file in os.listdir(path):
+                video_frame = transform(Image.open(os.path.join(path, frame_file))).view(1, self.num_of_channels, -1)
+                video = torch.cat((video, video_frame), dim=0)
+        else:
+            video = sample["signs_frames"].view(-1, self.num_of_channels, self.frame_size)
+        padding = torch.zeros(self.max_signs_frames - video.shape[0], self.num_of_channels,
+                              self.frame_size, dtype=torch.int)
+        video = torch.cat((video, padding), dim=0)
+
+        if self.transform is not None:
+            video = self.transform(video)
+        return video
 
     def _download_data(self):
         if self._check_integrity():
@@ -74,8 +88,16 @@ class SignGlossLanguage(VisionDataset):
             if not os.path.exists(os.path.join(self.root, file[1])):
                 os.system(f"wget '{self.source_url}/{file[1]}' -P {self.root}")
 
+        if self.original_frames:
+            if not os.path.exists(os.path.join(self.root, "Video", "data.zip")):
+                if VIDEO_CURL_COMMAND is None:
+                    raise RuntimeError("Please add curl command to download the data.")
+                os.system(VIDEO_CURL_COMMAND)
+
     def _check_integrity(self):
-        return all(os.path.exists(os.path.join(self.root, file)) for _, file in self.source_files_list)
+        article_data_exist = all(os.path.exists(os.path.join(self.root, file)) for _, file in self.source_files_list)
+        video_data_exist = not self.original_frames or os.path.exists(os.path.join(self.root, "Video", "PHOENIX-2014-T-release-v3"))
+        return article_data_exist & video_data_exist
 
     def _parser_data(self, gloss_to_idx, word_to_idx):
         samples = {}
@@ -86,25 +108,25 @@ class SignGlossLanguage(VisionDataset):
                     video_name = frame["name"]
                     if video_name in samples.keys():
                         raise RuntimeError(f"Please check {video_name}")
-                    sample = SignGlossSample(
-                        name=video_name,
-                        singer=frame["signer"],
-                        glosses=[gloss_to_idx[g] for g in frame["gloss"].strip().split(' ')],
-                        words=[word_to_idx[w] for w in frame["text"].strip().split(' ')],
-                        signs_frames=frame["sign"]
-                        )
-                    samples[video_name] = sample
-                    self.max_glosses = max(self.max_glosses, len(sample.glosses))
-                    self.max_words = max(self.max_words, len(sample.words))
-                    self.max_signs_frames = max(self.max_signs_frames, sample.signs_frames.shape[0])
+                    glosses = [gloss_to_idx[g] for g in frame["gloss"].strip().split(' ')]
+                    words = [word_to_idx[w] for w in frame["text"].strip().split(' ')]
+                    sign_frames = frame["sign"]
+                    samples[video_name] = {"name": video_name,
+                                           "singer": frame["signer"],
+                                           "glosses": torch.tensor(glosses, dtype=torch.int),
+                                           "words": torch.tensor(words, dtype=torch.int),
+                                           "signs_frames": torch.tensor(1) if self.original_frames else sign_frames}
+                    self.max_glosses = max(self.max_glosses, len(glosses))
+                    self.max_words = max(self.max_words, len(words))
+                    self.max_signs_frames = max(self.max_signs_frames, sign_frames.shape[0])
 
         # Padding
         for sample in samples.values():
             padding = torch.tensor([gloss_to_idx[Vocabulary.PAD_TOKEN]],
-                                   dtype=torch.int).repeat(self.max_glosses - len(sample.glosses))
-            sample.glosses = torch.cat((sample.glosses, padding), axis=0)
+                                   dtype=torch.int).repeat(self.max_glosses - len(sample["glosses"]))
+            sample["glosses"] = torch.cat((sample["glosses"], padding), dim=0)
             padding = torch.tensor([word_to_idx[Vocabulary.PAD_TOKEN]],
-                                   dtype=torch.int).repeat(self.max_words - len(sample.words))
-            sample.words = torch.cat((sample.words, padding), axis=0)
+                                   dtype=torch.int).repeat(self.max_words - len(sample["words"]))
+            sample["words"] = torch.cat((sample["words"], padding), dim=0)
 
         return list(samples.values())
