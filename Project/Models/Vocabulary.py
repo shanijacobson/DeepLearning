@@ -37,7 +37,8 @@ def build_vocab_from_data(root, key, min_freq=1) -> vocab.Vocab:
         return torch.load(path)
 
     counter = Counter()
-    source_list = ["phoenix14t.pami0.train", "phoenix14t.pami0.dev", "phoenix14t.pami0.test"]
+    source_list = [#"phoenix14t.pami0.train",
+     "phoenix14t.pami0.dev", "phoenix14t.pami0.test"]
 
     for name in source_list:
         with gzip.open(os.path.join(root, name), "rb") as f:
