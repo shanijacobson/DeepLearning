@@ -10,13 +10,14 @@ import pickle
 PAD_TOKEN = "<pad>"
 EOS_TOKEN = "<eos>"
 UNK_TOKEN = "<unk>"
+SIL_TOKEN = "<sil>"
 
 
 class GlossVocabulary(vocab.Vocab):
     def __init__(self, root):
         self.root = root
         vocabulary = build_vocab_from_data(root, "gloss")
-        self.specials_tokens = [PAD_TOKEN, EOS_TOKEN]
+        self.specials_tokens = [SIL_TOKEN, PAD_TOKEN, EOS_TOKEN]
         [vocabulary.append_token(token) for token in self.specials_tokens]
         super().__init__(vocabulary)
 
@@ -37,8 +38,7 @@ def build_vocab_from_data(root, key, min_freq=1) -> vocab.Vocab:
         return torch.load(path)
 
     counter = Counter()
-    source_list = [#"phoenix14t.pami0.train",
-     "phoenix14t.pami0.dev", "phoenix14t.pami0.test"]
+    source_list = ["phoenix14t.pami0.train", "phoenix14t.pami0.dev", "phoenix14t.pami0.test"]
 
     for name in source_list:
         with gzip.open(os.path.join(root, name), "rb") as f:

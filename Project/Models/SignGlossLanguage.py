@@ -52,12 +52,13 @@ class SignGlossLanguage(VisionDataset):
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
         glosses = sample["glosses"]
-        target = sample["words"]
-        video = self._get_videos_frame(sample)
+        words = sample["words"]
+        frames = self._get_videos_frame(sample)
 
         if self.target_transform is not None:
-            target = self.target_transform(target)
-        return video, glosses, target
+            words = self.target_transform(words)
+
+        return (frames, sample["frames_len"]), (glosses, sample["glosses_len"]), (words, sample["words_len"])
 
     def __len__(self) -> int:
         return len(self.data)
@@ -114,19 +115,26 @@ class SignGlossLanguage(VisionDataset):
                     samples[video_name] = {"name": video_name,
                                            "singer": frame["signer"],
                                            "glosses": torch.tensor(glosses, dtype=torch.int),
-                                           "words": torch.tensor(words, dtype=torch.int),
-                                           "signs_frames": torch.tensor(1) if self.original_frames else sign_frames}
+                                           "words": torch.tensor(words, dtype=torch.long),
+                                           "signs_frames": torch.tensor(1) if self.original_frames else sign_frames,
+                                           "glosses_len": 0,
+                                           "words_len": 0,
+                                           "frames_len": sign_frames.shape[0]}
                     self.max_glosses = max(self.max_glosses, len(glosses))
                     self.max_words = max(self.max_words, len(words))
                     self.max_signs_frames = max(self.max_signs_frames, sign_frames.shape[0])
 
         # Padding
         for sample in samples.values():
+            glosses_len = len(sample["glosses"])
             padding = torch.tensor([gloss_to_idx[Vocabulary.PAD_TOKEN]],
-                                   dtype=torch.int).repeat(self.max_glosses - len(sample["glosses"]))
+                                   dtype=torch.int).repeat(self.max_glosses - glosses_len)
             sample["glosses"] = torch.cat((sample["glosses"], padding), dim=0)
+            sample["glosses_len"] = glosses_len
+            words_len = len(sample["words"])
             padding = torch.tensor([word_to_idx[Vocabulary.PAD_TOKEN]],
-                                   dtype=torch.int).repeat(self.max_words - len(sample["words"]))
+                                   dtype=torch.long).repeat(self.max_words - words_len)
             sample["words"] = torch.cat((sample["words"], padding), dim=0)
+            sample["words_len"] = words_len
 
         return list(samples.values())

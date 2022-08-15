@@ -2,7 +2,7 @@ from torch import nn
 
 
 class SLTModelLoss(nn.Module):
-    def __init__(self, gloss_blank_index, word_ignore_index, gloss_loss_weight=0.3, word_loss_weight=0.7):
+    def __init__(self, gloss_blank_index, word_ignore_index, gloss_loss_weight=1.0, word_loss_weight=1.0):
         super().__init__()
         self.gloss_loss_weight = gloss_loss_weight
         self.word_loss_weight = word_loss_weight
