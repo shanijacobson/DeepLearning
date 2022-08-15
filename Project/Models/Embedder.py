@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import math
 
 
 class AlexNetSE(nn.Module):
@@ -56,38 +54,3 @@ class AlexNetSE(nn.Module):
                 out = out.view(-1, 6 * 6 * 256)  # TODO: not sure what are those numbers, can you put them in contants/add comment?
             out = self.layers[i](out)
         return out
-
-
-class PositionalEncoding(nn.Module):
-    """
-    Pre-compute position encodings (PE).
-    https://github.com/OpenNMT/OpenNMT-py
-    """
-
-    def __init__(self, size: int = 0, max_len: int = 5000):
-        super(PositionalEncoding, self).__init__()
-        if size % 2 != 0:
-            raise ValueError(
-                "Cannot use sin/cos positional encoding with "
-                f"odd dim (got dim={size})"
-            )
-        pe = torch.zeros(max_len, size)
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(
-            (torch.arange(0, size, 2, dtype=torch.float) * -(math.log(10000.0) / size))
-        )
-        pe[:, 0::2] = torch.sin(position.float() * div_term)
-        pe[:, 1::2] = torch.cos(position.float() * div_term)
-        pe = pe.unsqueeze(0)  # shape: [1, size, max_len]
-        super(PositionalEncoding, self).__init__()
-        self.register_buffer("pe", pe)
-        self.dim = size
-
-    def forward(self, emb):
-        """Embed inputs.
-        Args:
-            emb (FloatTensor): Sequence of word vectors
-                ``(seq_len, batch_size, self.dim)``
-        """
-        # Add position encodings
-        return emb + self.pe[:, : emb.size(1)]
