@@ -1,24 +1,27 @@
 import torch
 import torch.nn as nn
 import math
-from Models.Embedder import AlexNetSE
+from Models.Embedding import AlexNetSE, FrameEmbedding, WordEmbedding
 from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoderLayer, TransformerDecoder
 
 
 class SLTModel(nn.Module):
     @staticmethod
-    def get_mask_for_seq(seq_len, device):
+    def get_future_mask_for_seq(seq_len, device):
         mask = torch.ones(seq_len, seq_len)
         if device >= 0:
             mask = mask.to(device)
-        return torch.triu(mask, diagonal=1)
+        return torch.triu(mask, diagonal=1).type(torch.bool)
 
-    def __init__(self, gloss_dim, words_dim, embedding_dim=1024, num_layers_encoder=2, num_layers_decoder=2, n_head=8,
-                 ff_size=2048, drop_p=0.1, spatial_flag=False):
+    def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, embedding_dim=512, num_layers_encoder=2,
+                 num_layers_decoder=2, n_head=8, ff_size=2048, drop_p=0.1, spatial_flag=False):
         super(SLTModel, self).__init__()
         self.spatial_flag = spatial_flag
         self.embedding_dim = embedding_dim
-        self.spatial_embedding = AlexNetSE(drop_p) if spatial_flag else None
+        self.frame_embedding = AlexNetSE() if spatial_flag else FrameEmbedding(input_size=frame_size,
+                                                                               emb_dim=embedding_dim)
+        self.word_padding_index = word_padding_idx
+        self.word_embedding = WordEmbedding(padding_idx=word_padding_idx, input_size=words_dim, emb_dim=embedding_dim)
         self.encoder = Encoder(embedding_dim, num_layers_encoder, n_head, ff_size, drop_p)
         self.decoder = Decoder(words_dim, embedding_dim, num_layers_decoder, n_head, ff_size, drop_p)
         self.gloss_output_layer = nn.Linear(embedding_dim, gloss_dim)
@@ -29,52 +32,69 @@ class SLTModel(nn.Module):
         self.gloss_output_layer.bias.data.zero_()
         self.gloss_output_layer.weight.data.uniform_(-init_range, init_range)
 
-    def forward(self, frames, words):
-        if self.spatial_embedding:
+    def encode(self, frames, frames_padding_mask):
+        if self.spatial_flag:
             embedded_frames = self.spatial_embedding(frames) * math.sqrt(self.embedding_dim)
         else:
-            embedded_frames = frames.squeeze(dim=2).clone()
-        encoder_output = self.encoder(embedded_frames)
+            embedded_frames = self.frame_embedding(frames.squeeze(dim=2), frames_padding_mask)
+        return self.encoder(embedded_frames, frames_padding_mask)
+
+    def decode(self, words, encoder_output,  frames_padding_mask, words_padding_mask):
+        words_future_mask = self.get_future_mask_for_seq(words.shape[1], words.get_device())
+        embedded_words = self.word_embedding(words, words_padding_mask)
+        decoder_output = self.decoder(embedded_words, encoder_output, words_future_mask,
+                                      words_padding_mask, frames_padding_mask)
+        return decoder_output
+
+    def forward(self, frames, words):
+        frames_padding_mask = (frames.sum(dim=-1) == 0).squeeze(-1)
+        words_padding_mask = (words == self.word_padding_index)
+        encoder_output = self.encode(frames, frames_padding_mask)
         glosses_prob_output = self.gloss_output_layer(encoder_output).log_softmax(dim=-1)
-        frames_mask = self.get_mask_for_seq(encoder_output.shape[1], encoder_output.get_device())
-        words_mask = self.get_mask_for_seq(words.shape[1], words.get_device())
-        decoder_output = self.decoder(words, encoder_output, words_mask, frames_mask)
+        decoder_output = self.decode(words, encoder_output, frames_padding_mask, words_padding_mask)
         return decoder_output, glosses_prob_output
 
 
 class Encoder(nn.Module):
     def __init__(self, embedding_dim, num_layers, n_head, ff_size, drop_p):
         super(Encoder, self).__init__()
-        self.emb_dim = embedding_dim
-        # self.pos_encoder = PositionalEncoder(embedding_dim, drop_p)
+        self.embedding_dim = embedding_dim
+        self.emb_dropout = nn.Dropout(drop_p)
+        self.pos_encoder = PositionalEncoder(embedding_dim, drop_p)
         encoder_layers = TransformerEncoderLayer(d_model=embedding_dim, nhead=n_head, dim_feedforward=ff_size,
                                                  dropout=drop_p, batch_first=True)
-        self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers)
+        self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers,
+                                                      norm=nn.LayerNorm(embedding_dim, eps=1e-6))
 
-    def forward(self, X):
-        return self.transformer_encoder(X)
+    def forward(self, embedded_frames, frames_padding_mask):
+        output = self.pos_encoder(embedded_frames)
+        output = self.emb_dropout(output)
+        return self.transformer_encoder(output, src_key_padding_mask=frames_padding_mask)
 
 
 class Decoder(nn.Module):
     def __init__(self, words_dim, embedding_dim, num_layers, n_head, ff_size, drop_p):
         super(Decoder, self).__init__()
-        self.word_embedding = nn.Embedding(words_dim, embedding_dim)
         decoder_layers = TransformerDecoderLayer(d_model=embedding_dim, nhead=n_head, dim_feedforward=ff_size,
                                                  dropout=drop_p, batch_first=True)
-        self.transformer_decoder = TransformerDecoder(decoder_layers, num_layers)
+        self.pos_encoding = PositionalEncoder(embedding_dim, drop_p)
+        self.emb_dropout = nn.Dropout(drop_p)
+        self.transformer_decoder = TransformerDecoder(decoder_layers, num_layers,
+                                                      norm=nn.LayerNorm(embedding_dim, eps=1e-6))
         self.words_output_layer = nn.Linear(embedding_dim, words_dim)
         self.init_weights()
 
     def init_weights(self):
         init_range = 0.1
-        self.word_embedding.weight.data.uniform_(-init_range, init_range)
         self.words_output_layer.bias.data.zero_()
         self.words_output_layer.weight.data.uniform_(-init_range, init_range)
 
-    def forward(self, tgt, memory, tgt_mask, memory_mask):
-        # TODO: check if need to send memory_mask
-        word_embedding = self.word_embedding(tgt)
-        output = self.transformer_decoder(word_embedding, memory, tgt_mask)
+    def forward(self, embedded_words, encoder_output, words_future_mask, words_padding_mask, frames_padding_mask):
+        embedded_words = self.pos_encoding(embedded_words)
+        embedded_words = self.emb_dropout(embedded_words)
+        output = self.transformer_decoder(
+            tgt=embedded_words, memory=encoder_output, tgt_mask=words_future_mask,
+            tgt_key_padding_mask=words_padding_mask, memory_key_padding_mask=frames_padding_mask)
         return self.words_output_layer(output).log_softmax(dim=-1)
 
 

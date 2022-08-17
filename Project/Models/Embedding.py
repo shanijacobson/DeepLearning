@@ -53,36 +53,30 @@ class AlexNetSE(nn.Module):
 
 
 class FrameEmbedding(nn.Module):
-    def __init__(self, input_size, emb_dim=512, drop_p=0.1):
+    def __init__(self, input_size, emb_dim=512):
         super(FrameEmbedding, self).__init__()
         self.emb_dim = emb_dim
         self.input_size = input_size
-        self.embedding = nn.Sequential(
-            nn.Linear(self.input_size, self.embedding_dim),
-            nn.Dropout(drop_p)
-        )
+        self.embedding = nn.Linear(self.input_size, self.emb_dim)
         self.norm = nn.BatchNorm1d(num_features=emb_dim)
         self.activation = nn.Softsign()
 
-    def forward(self, X):
+    def forward(self, X, mask):
         output = self.embedding(X)
         # output = self.norm(output) # TODO: add masked norm
         return self.activation(output)
 
 
 class WordEmbedding(nn.Module):
-    def __init__(self, padding_idx, input_size, emb_dim=512, drop_p=0.1):
+    def __init__(self, padding_idx, input_size, emb_dim=512):
         super(WordEmbedding, self).__init__()
         self.emb_dim = emb_dim
         self.input_size = input_size
-        self.embedding = nn.Sequential(
-            nn.Embedding(input_size, emb_dim, padding_idx=padding_idx),
-            nn.Dropout(drop_p)
-        )
+        self.embedding = nn.Embedding(input_size, emb_dim, padding_idx=padding_idx)
         self.norm = nn.BatchNorm1d(num_features=emb_dim)
         self.activation = nn.Softsign()
 
-    def forward(self, X):
+    def forward(self, X, mask):
         output = self.embedding(X)
         # output = self.norm(output) # TODO: add masked norm
         return self.activation(output)

@@ -32,7 +32,7 @@ def get_data():
 
     # Build Datasets
     total_train_dataset = SignGlossLanguage(root=DATA_PATH, train=True, download=False,
-                                            word_vocab=word_vocab, gloss_vocab=gloss_vocab)
+                                            word_vocab=word_vocab.vocab, gloss_vocab=gloss_vocab.vocab)
     train_dataset, valid_dataset = random_split(total_train_dataset,
                                                 [len(total_train_dataset) - VALIDATION_SIZE, VALIDATION_SIZE])
     test_dataset = SignGlossLanguage(root=DATA_PATH, train=False, download=False,
@@ -48,7 +48,8 @@ def get_data():
 def train_model():
     train_loader, gloss_vocab, word_vocab = get_data()
 
-    model = SLTModel(gloss_dim=len(gloss_vocab), words_dim=len(word_vocab)).to(DEVICE)
+    model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
+                     word_padding_idx=word_vocab[PAD_TOKEN]).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     criterion = SLTModelLoss(gloss_vocab.get_stoi()[SIL_TOKEN], word_vocab.get_stoi()[PAD_TOKEN]).to(DEVICE)
     for _ in range(3):
