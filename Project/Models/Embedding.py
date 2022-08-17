@@ -2,10 +2,6 @@ import torch.nn as nn
 
 
 class AlexNetSE(nn.Module):
-    """
-    AlexNet for spatial embedding
-    """
-
     def __init__(self, drop_p=0, emb_dim=4096, bn_flag=False):
         super(AlexNetSE, self).__init__()
         self.batch_norm_layer = nn.BatchNorm2d(1) if bn_flag else None
@@ -54,3 +50,39 @@ class AlexNetSE(nn.Module):
                 out = out.view(-1, 6 * 6 * 256)  # TODO: not sure what are those numbers, can you put them in contants/add comment?
             out = self.layers[i](out)
         return out
+
+
+class FrameEmbedding(nn.Module):
+    def __init__(self, input_size, emb_dim=512, drop_p=0.1):
+        super(FrameEmbedding, self).__init__()
+        self.emb_dim = emb_dim
+        self.input_size = input_size
+        self.embedding = nn.Sequential(
+            nn.Linear(self.input_size, self.embedding_dim),
+            nn.Dropout(drop_p)
+        )
+        self.norm = nn.BatchNorm1d(num_features=emb_dim)
+        self.activation = nn.Softsign()
+
+    def forward(self, X):
+        output = self.embedding(X)
+        # output = self.norm(output) # TODO: add masked norm
+        return self.activation(output)
+
+
+class WordEmbedding(nn.Module):
+    def __init__(self, padding_idx, input_size, emb_dim=512, drop_p=0.1):
+        super(WordEmbedding, self).__init__()
+        self.emb_dim = emb_dim
+        self.input_size = input_size
+        self.embedding = nn.Sequential(
+            nn.Embedding(input_size, emb_dim, padding_idx=padding_idx),
+            nn.Dropout(drop_p)
+        )
+        self.norm = nn.BatchNorm1d(num_features=emb_dim)
+        self.activation = nn.Softsign()
+
+    def forward(self, X):
+        output = self.embedding(X)
+        # output = self.norm(output) # TODO: add masked norm
+        return self.activation(output)

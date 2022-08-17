@@ -21,8 +21,8 @@ class SignGlossLanguage(VisionDataset):
 
     def __init__(self,
                  root: str,
-                 gloss_vocab: Vocabulary.GlossVocabulary,
-                 word_vocab: Vocabulary.WordVocabulary,
+                 gloss_vocab: Vocabulary,
+                 word_vocab: Vocabulary,
                  train: bool = True,
                  download: bool = False,
                  original_frames: bool = False,
@@ -40,6 +40,7 @@ class SignGlossLanguage(VisionDataset):
         self.max_signs_frames = max_signs_frames
         self.max_glosses = max_glosses
         self.max_words = max_words
+        self.max_allowed_frames = 400  # maximum allowed len of frames
         self.source_files_list = self.train_files_list if self.train else self.test_files_list
 
         if download:
@@ -47,7 +48,7 @@ class SignGlossLanguage(VisionDataset):
 
         if not self._check_integrity():
             raise RuntimeError("Dataset not found or corrupted. You can use download=True to download it")
-        self.data = self._parser_data(gloss_vocab.get_stoi(), word_vocab.get_stoi())
+        self.data = self._parser_data(gloss_vocab, word_vocab)
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
@@ -100,20 +101,33 @@ class SignGlossLanguage(VisionDataset):
         video_data_exist = not self.original_frames or os.path.exists(os.path.join(self.root, "Video", "PHOENIX-2014-T-release-v3"))
         return article_data_exist & video_data_exist
 
-    def _parser_data(self, gloss_to_idx, word_to_idx):
+    def _parser_data(self, gloss_vocab, word_vocab):
+        path = os.path.join("Data", "models", f"{'total_train' if self.train else 'test'}_dataset")
+        if os.path.exists(path):
+            print(f"Getting existing dataset: {path}")
+            samples = torch.load(path)
+            self.max_glosses = samples[0]['glosses'].size()
+            self.max_words = samples[0]['words'].size()
+            self.max_signs_frames = max([sample['signs_frames'].size(0) for sample in samples])
+            return samples
+
         samples = {}
         for _, source_file in self.source_files_list:
             with gzip.open(os.path.join(self.root, source_file), "rb") as f:
                 loaded_object = pickle.load(f)
-                for frame in loaded_object:
-                    video_name = frame["name"]
+                for example in loaded_object:
+                    video_name = example["name"]
                     if video_name in samples.keys():
                         raise RuntimeError(f"Please check {video_name}")
-                    glosses = [gloss_to_idx[g] for g in frame["gloss"].strip().split(' ')]
-                    words = [word_to_idx[w] for w in frame["text"].strip().split(' ')]
-                    sign_frames = frame["sign"]
+                    sign_frames = example["sign"]
+                    if sign_frames.shape[0] > self.max_allowed_frames:
+                        continue
+                    glosses = [gloss_vocab[g] for g in example["gloss"].strip().split(' ')]
+                    words = [word_vocab[Vocabulary.BOS_TOKEN]] + \
+                            [word_vocab[w] for w in example["text"].replace('.', '').strip().split(' ')] + \
+                            [word_vocab[Vocabulary.EOS_TOKEN]]
                     samples[video_name] = {"name": video_name,
-                                           "singer": frame["signer"],
+                                           "singer": example["signer"],
                                            "glosses": torch.tensor(glosses, dtype=torch.int),
                                            "words": torch.tensor(words, dtype=torch.long),
                                            "signs_frames": torch.tensor(1) if self.original_frames else sign_frames,
@@ -127,14 +141,15 @@ class SignGlossLanguage(VisionDataset):
         # Padding
         for sample in samples.values():
             glosses_len = len(sample["glosses"])
-            padding = torch.tensor([gloss_to_idx[Vocabulary.PAD_TOKEN]],
+            padding = torch.tensor([gloss_vocab[Vocabulary.PAD_TOKEN]],
                                    dtype=torch.int).repeat(self.max_glosses - glosses_len)
             sample["glosses"] = torch.cat((sample["glosses"], padding), dim=0)
             sample["glosses_len"] = glosses_len
             words_len = len(sample["words"])
-            padding = torch.tensor([word_to_idx[Vocabulary.PAD_TOKEN]],
+            padding = torch.tensor([word_vocab[Vocabulary.PAD_TOKEN]],
                                    dtype=torch.long).repeat(self.max_words - words_len)
             sample["words"] = torch.cat((sample["words"], padding), dim=0)
             sample["words_len"] = words_len
-
-        return list(samples.values())
+        samples = list(samples.values())
+        torch.save(samples, path)
+        return samples
