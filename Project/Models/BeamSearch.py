@@ -47,11 +47,14 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentance_l
         nodes_value = top_beams.indices.fmod((log_prob.shape[1] / beam_size)).type(torch.int64)
         # crating the new predicated tensor
 
+        sent_ends =  torch.cat([torch.tensor([sent_ends.index_select(1, beams_vec[:, j]) [k,k] for k in range(batch_size)]) for j in range(beam_size)]).view(
+            beam_size,batch_size).T.to(encoder_output.device)
+
         is_end = nodes_value.eq(eos_index)
         sent_ends[is_end] =  torch.minimum(sent_ends[is_end] ,torch.full_like(sent_ends[is_end],i))
         
-        predict = torch.cat([predict.index_select(1, beams_vec[:, j])[:, 0, :] for j in range(beam_size)], dim=-1).view(
-            batch_size, beam_size, -1)
+        predict = torch.cat([torch.cat([predict.index_select(1, beams_vec[:, j]) [k,k] for k in range(batch_size)]).view(batch_size,sentance_length) for j in range(beam_size)]).view(
+            beam_size,batch_size, -1).permute(1,0,2).to(encoder_output.device)
         predict[:, :, i] = nodes_value
         topk_log_probs = top_beams.values
         
