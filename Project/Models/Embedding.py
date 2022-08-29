@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -58,12 +59,12 @@ class FrameEmbedding(nn.Module):
         self.emb_dim = emb_dim
         self.input_size = input_size
         self.embedding = nn.Linear(self.input_size, self.emb_dim)
-        self.norm = nn.BatchNorm1d(num_features=emb_dim)
+        self.norm = MaskedBatchNormLayer(num_features=emb_dim)
         self.activation = nn.Softsign()
 
-    def forward(self, X, mask):
-        output = self.embedding(X)
-        # output = self.norm(output) # TODO: add masked norm
+    def forward(self, x, mask):
+        output = self.embedding(x)
+        output = self.norm(output, mask)
         return self.activation(output)
 
 
@@ -73,10 +74,28 @@ class WordEmbedding(nn.Module):
         self.emb_dim = emb_dim
         self.input_size = input_size
         self.embedding = nn.Embedding(input_size, emb_dim, padding_idx=padding_idx)
-        self.norm = nn.BatchNorm1d(num_features=emb_dim)
+        self.norm = MaskedBatchNormLayer(num_features=emb_dim)
         self.activation = nn.Softsign()
 
-    def forward(self, X, mask):
-        output = self.embedding(X)
-        # output = self.norm(output) # TODO: add masked norm
+    def forward(self, x, mask):
+        output = self.embedding(x)
+        output = self.norm(output, mask)
         return self.activation(output)
+
+
+class MaskedBatchNormLayer(nn.Module):
+    def __init__(self, num_features):
+        super(MaskedBatchNormLayer, self).__init__()
+        self.num_features = num_features
+        self.bn = nn.BatchNorm1d(num_features=num_features)
+
+    def forward(self, x, mask):
+        if not self.training:
+            output = self.bn(x.view(-1, self.num_features))
+            return output.view(x.shape)
+
+        reshaped_x = x.view(-1, self.num_features)
+        reshaped_mask = mask.logical_not().view(-1, 1)
+        selected = torch.masked_select(reshaped_x, reshaped_mask).view(-1, self.num_features)
+        batch_normed = self.bn(selected)
+        return reshaped_x.masked_scatter(reshaped_mask, batch_normed).view(x.shape)

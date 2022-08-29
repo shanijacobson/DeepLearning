@@ -13,8 +13,8 @@ class SLTModel(nn.Module):
             mask = mask.to(device)
         return torch.triu(mask, diagonal=1).type(torch.bool)
 
-    def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, embedding_dim=512, num_layers_encoder=2,
-                 num_layers_decoder=2, n_head=8, ff_size=2048, drop_p=0.1, spatial_flag=False):
+    def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, embedding_dim=512, num_layers_encoder=3,
+                 num_layers_decoder=3, n_head=8, ff_size=2048, drop_p=0.1, spatial_flag=False):
         super(SLTModel, self).__init__()
         self.spatial_flag = spatial_flag
         self.embedding_dim = embedding_dim
@@ -28,9 +28,12 @@ class SLTModel(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        init_range = 0.1
-        self.gloss_output_layer.bias.data.zero_()
-        self.gloss_output_layer.weight.data.uniform_(-init_range, init_range)
+        init_gain = 1.0
+        for m in self.modules():
+            if hasattr(m, 'bias'):
+                m.bias.data.zero_()
+            if hasattr(m, 'weight') and len(m.weight.shape) > 1:
+                nn.init.xavier_uniform_(m.weight, gain=init_gain)
 
     def encode(self, frames, frames_padding_mask):
         if self.spatial_flag:
@@ -82,12 +85,6 @@ class Decoder(nn.Module):
         self.transformer_decoder = TransformerDecoder(decoder_layers, num_layers,
                                                       norm=nn.LayerNorm(embedding_dim, eps=1e-6))
         self.words_output_layer = nn.Linear(embedding_dim, words_dim)
-        self.init_weights()
-
-    def init_weights(self):
-        init_range = 0.1
-        self.words_output_layer.bias.data.zero_()
-        self.words_output_layer.weight.data.uniform_(-init_range, init_range)
 
     def forward(self, embedded_words, encoder_output, words_future_mask, words_padding_mask, frames_padding_mask):
         embedded_words = self.pos_encoding(embedded_words)
