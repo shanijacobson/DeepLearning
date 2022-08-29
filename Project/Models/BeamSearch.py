@@ -59,7 +59,7 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentance_l
         topk_log_probs = top_beams.values
         
 
-    predict = [predict[i,0,:sent_ends[i,0]].tolist() for i in range(predict[:,0,1:].shape[0])]  
+    predict = [predict[i,0,1:min(sentance_length, sent_ends[i,0]+1)].tolist() for i in range(predict[:,0,1:].shape[0])]  
     return predict
     #return predict[:, 0,:int(min(sent_ends[:,0].max(),sentance_length))]
 
