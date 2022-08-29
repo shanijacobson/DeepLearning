@@ -40,41 +40,46 @@ def get_data():
                                      word_vocab=word_vocab, gloss_vocab=gloss_vocab)
 
     # Data Loaders:
-    train_loader = DataLoader(train_dataset, BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(valid_dataset, BATCH_SIZE, shuffle=True)
     # validation_loader = DataLoader(valid_dataset, BATCH_SIZE, shuffle=True)
     # test_loader = DataLoader(test_dataset, BATCH_SIZE, shuffle=False)
     return train_loader, gloss_vocab, word_vocab
 
 
 def train_model():
-    train_loader, gloss_vocab, word_vocab = get_data()
+    valid_loader, gloss_vocab, word_vocab = get_data()
 
     model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
                      word_padding_idx=word_vocab[PAD_TOKEN]).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     criterion = SLTModelLoss(gloss_vocab.get_stoi()[SIL_TOKEN], word_vocab[PAD_TOKEN]).to(DEVICE)
     idx_to_words = word_vocab.get_itos()
-    for _ in range(3):
+    iter = 0
+    for _ in range(200):
         lost_list = []
         txt_hyp = []
-        for (frames, frames_len), (glosses, glosses_len), (words, words_len) in train_loader:
-            print("cool")
+
+        for (frames, frames_len), (glosses, glosses_len), (words, words_len) in valid_loader:
+            print(iter)
+            iter += 1
             frames = frames.to(DEVICE)
             glosses = glosses.to(DEVICE)
             words = words.to(DEVICE)
             words_output, glosses_output, encoder_output = model(frames, words)
             words_output = words_output.permute(1, 2, 0)
-            predict = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN],
-                             word_vocab[EOS_TOKEN], word_vocab[PAD_TOKEN], max_output_length=30)
+            if ((iter + 1) % 30) == 0:
+                predict = beam_search(1, frames.shape[0], model, frames, encoder_output, 30, word_vocab[BOS_TOKEN],
+                                      word_vocab[PAD_TOKEN])
 
-            idx_to_seq = [' '.join([idx_to_words[idx] for idx in seq]) for seq in predict]
-            txt_hyp.extend(idx_to_seq)
-            a=1
-            # loss = criterion(glosses, words.T, glosses_output, words_output, frames_len, glosses_len)
-            # lost_list.append(float(loss) / frames.shape[1])
-            # optimizer.zero_grad()
-            # loss.backward()
-            # optimizer.step()
+            # predict_2 = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN], word_vocab[EOS_TOKEN],
+            #                    word_vocab[PAD_TOKEN])
+
+            loss = criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len)
+            norm_loss = loss / glosses.shape[0]
+            optimizer.zero_grad()
+            norm_loss.backward()
+            print(loss.cpu().detach().numpy())
+            optimizer.step()
         print(sum(lost_list))
 
 

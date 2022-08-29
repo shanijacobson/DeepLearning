@@ -13,7 +13,7 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentance_l
     predict[:, :, 0] = bos_index
 
     # init a fake mask (only zeros)
-    mask = torch.zeros(sentance_length, sentance_length, device=encoder_output.device)
+    mask = torch.zeros(sentance_length, sentance_length, device=encoder_output.device, dtype=bool)
 
     for i in range(1, sentance_length):
         beam_list = []
@@ -22,7 +22,7 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentance_l
             frames_padding_mask = (frames.sum(dim=-1) == 0).squeeze(-1)
             words_padding_mask = (words == pad_index)
             ew = model.word_embedding(words, pad_index)
-            log_prob_bim = model.decoder(ew, encoder_output, mask, words_padding_mask, frames_padding_mask)[:, i, :]
+            log_prob_bim = model.decoder(ew, encoder_output, mask, words_padding_mask, frames_padding_mask)[:, i-1, :]
             # adding to the prob of the rout to the probs that come out the decoder
             log_prob_bim += topk_log_probs[:, j, None]
             beam_list.append(log_prob_bim)
