@@ -56,10 +56,9 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentence_l
         sent_ends[is_end] = torch.minimum(sent_ends[is_end], torch.full_like(sent_ends[is_end], i))
 
         predict = torch.cat([torch.cat(
-            [predict.index_select(1, beams_vec[:, j])[k, k] for k in range(batch_size)]).view(batch_size,
-                                                                                              sentance_length) for j in
-                             range(beam_size)]).view(
-            beam_size, batch_size, -1).permute(1, 0, 2).to(encoder_output.device)
+            [predict.index_select(1, beams_vec[:, j])[k, k] for k in range(batch_size)])
+                            .view(batch_size, sentence_length)  for j in range(beam_size)]
+                            ).view(beam_size, batch_size, -1).permute(1, 0, 2).to(encoder_output.device)
         predict[:, :, i] = nodes_value
         topk_log_probs = top_beams.values
 
