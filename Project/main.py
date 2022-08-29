@@ -63,6 +63,7 @@ def train_model():
             glosses = glosses.to(DEVICE)
             words = words.to(DEVICE)
             words_output, glosses_output, encoder_output = model(frames, words)
+<<<<<<< Updated upstream
             words_output = words_output.permute(1, 2, 0)
             predict = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN],
                              word_vocab[EOS_TOKEN], word_vocab[PAD_TOKEN], max_output_length=30)
@@ -75,6 +76,21 @@ def train_model():
             # optimizer.zero_grad()
             # loss.backward()
             # optimizer.step()
+=======
+            if ((iter + 1) % 30) == 0:
+                predict = beam_search(1, frames.shape[0], model, frames, encoder_output, 30, word_vocab[BOS_TOKEN],
+                                      word_vocab[PAD_TOKEN])
+
+            # predict_2 = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN], word_vocab[EOS_TOKEN],
+            #                    word_vocab[PAD_TOKEN])
+
+            loss = criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len)
+            norm_loss = loss / glosses.shape[0]
+            optimizer.zero_grad()
+            norm_loss.backward()
+            print(loss.cpu().detach().numpy())
+            optimizer.step()
+>>>>>>> Stashed changes
         print(sum(lost_list))
 
 

@@ -15,4 +15,5 @@ class SLTModelLoss(nn.Module):
                                                  input_lengths=frames_len, target_lengths=glosses_len)
         # Input shape: (batch_size, word_vocab_size, input_length)
         translation_loss = self.translation_loss(input=words_output.permute(0, 2, 1), target=words)
+        translation_loss = self.translation_loss(input=words_output.permute(0, 2, 1)[:, :, :-1], target=words[:, 1:])
         return self.gloss_loss_weight * recognition_loss + self.word_loss_weight * translation_loss
