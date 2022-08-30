@@ -23,7 +23,7 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentence_l
             frames_padding_mask = (frames.sum(dim=-1) == 0).squeeze(-1)
             words_padding_mask = (words == pad_index)
             ew = model.word_embedding(words, pad_index)
-            log_prob_bim = model.decoder(ew, encoder_output, None, words_padding_mask, frames_padding_mask)[:, i-1, :]
+            log_prob_bim = model.decoder(ew, encoder_output, None, words_padding_mask, frames_padding_mask)[:, i - 1, :]
             #  log_prob_bim = model.decode(words,encoder_output,  frames_padding_mask,words_padding_mask)[:, i, :]
 
             # for all sent. that are finished - can predicat from now only eos, with not "cost"
@@ -57,12 +57,13 @@ def beam_search(beam_size, batch_size, model, frames, encoder_output, sentence_l
 
         predict = torch.cat([torch.cat(
             [predict.index_select(1, beams_vec[:, j])[k, k] for k in range(batch_size)])
-                            .view(batch_size, sentence_length)  for j in range(beam_size)]
+                            .view(batch_size, sentence_length) for j in range(beam_size)]
                             ).view(beam_size, batch_size, -1).permute(1, 0, 2).to(encoder_output.device)
         predict[:, :, i] = nodes_value
         topk_log_probs = top_beams.values
 
-    predict = [predict[i,0,1:min(sentence_length, sent_ends[i,0]+1)].tolist() for i in range(predict[:,0,1:].shape[0])]  
+    predict = [predict[i, 0, 1:min(sentence_length, sent_ends[i, 0] + 1)].tolist() for i in
+               range(predict[:, 0, 1:].shape[0])]
 
     return predict
     # return predict[:, 0,:int(min(sent_ends[:,0].max(),sentance_length))]
@@ -99,6 +100,16 @@ def greedy(model, frames, words, encoder_output, bos_idx, eos_idx, pad_idx, max_
         # stop predicting if <eos> reached for all elements in batch
         if (finished >= 1).sum() == batch_size:
             break
+    # remove BOS-symbol
+    ys = ys[:, 1:].detach().cpu().numpy()
+    seq_to_list = []
+    for i in range(batch_size):
+        seq = []
+        for word_idx in ys[i]:
+            seq.append(word_idx)
+            if word_idx == eos_idx:
+                break
+        seq_to_list.append(seq)
 
     ys = ys[:, 1:]  # remove BOS-symbol
     return ys.detach().cpu().numpy()

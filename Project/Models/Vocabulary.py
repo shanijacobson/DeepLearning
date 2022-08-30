@@ -20,6 +20,10 @@ class GlossVocabulary(vocab.Vocab):
         vocabulary = build_vocab_from_data(root, "gloss", specials=self.specials_tokens)
         super().__init__(vocabulary)
 
+    def idx_to_seq(self, idx_list):
+        idx_to_glosses = self.get_itos()
+        return [idx_to_glosses[idx] for idx in idx_list]
+
 
 class WordVocabulary(vocab.Vocab):
     def __init__(self, root):
@@ -27,6 +31,15 @@ class WordVocabulary(vocab.Vocab):
         self.specials_tokens = [UNK_TOKEN, PAD_TOKEN, BOS_TOKEN, EOS_TOKEN]
         vocabulary = build_vocab_from_data(root, "text", specials=self.specials_tokens)
         super().__init__(vocabulary)
+
+    def idx_to_seq(self, idx_list, eos_stop=True):
+        idx_to_words = self.get_itos()
+        seq = []
+        for idx in idx_list:
+            seq.append(idx_to_words[idx])
+            if idx == self.vocab[EOS_TOKEN] and eos_stop:
+                break
+        return idx_to_words
 
 
 def build_vocab_from_data(root, key, specials, min_freq=1) -> vocab.Vocab:
