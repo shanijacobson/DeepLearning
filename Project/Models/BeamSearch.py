@@ -111,6 +111,4 @@ def greedy(model, frames, words, encoder_output, bos_idx, eos_idx, pad_idx, max_
             if word_idx == eos_idx:
                 break
         seq_to_list.append(seq)
-
-    ys = ys[:, 1:]  # remove BOS-symbol
-    return ys
+    return seq_to_list
