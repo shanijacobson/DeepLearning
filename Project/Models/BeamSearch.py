@@ -1,9 +1,10 @@
 import torch
 
 
-def beam_search(beam_size, batch_size, model, frames, encoder_output, sentence_length, bos_index, pad_index, eos_index,
+def beam_search(model, frames, encoder_output, beam_size, sentence_length, bos_index, pad_index, eos_index,
                 alpha=1.0):
     model.eval()
+    batch_size = frames.shape[0]
     # init the log prob
     topk_log_probs = torch.zeros(batch_size, beam_size, device=encoder_output.device)
     topk_log_probs[:, 1:] = -torch.inf
@@ -112,4 +113,4 @@ def greedy(model, frames, words, encoder_output, bos_idx, eos_idx, pad_idx, max_
         seq_to_list.append(seq)
 
     ys = ys[:, 1:]  # remove BOS-symbol
-    return ys.detach().cpu().numpy()
+    return ys
