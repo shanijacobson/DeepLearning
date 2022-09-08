@@ -49,13 +49,18 @@ def build_vocab_from_data(root, key, specials, min_freq=1) -> vocab.Vocab:
         return torch.load(path)
 
     counter = Counter()
-    source_list = ["phoenix14t.pami0.train", "phoenix14t.pami0.dev", "phoenix14t.pami0.test"]
+    source_list = ["phoenix14t.pami0.train"]
 
     for name in source_list:
         with gzip.open(os.path.join(root, name), "rb") as f:
             loaded_object = pickle.load(f)
             for sample in loaded_object:
-                counter.update(sample[key].split(' '))
+                if sample['sign'].shape[0] > 400:
+                    continue
+                tmp = sample[key].replace('.', '').strip().split(' ')
+                if len(tmp) > 400:
+                    continue
+                counter.update(tmp)
     ordered_dict = OrderedDict(sorted(counter.items(), key=lambda x: (-x[1], x[0])))
     vocabulary = vocab.vocab(ordered_dict, min_freq=min_freq, specials=specials, special_first=True)
     vocabulary.set_default_index(vocabulary.get_stoi()[UNK_TOKEN])

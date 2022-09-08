@@ -1,4 +1,4 @@
-from Models.BeamSearch import beam_search, greedy
+from Models.Predictions import beam_search, greedy
 from Models.SignGlossLanguage import SignGlossLanguage
 from Models.SLTModelLoss import SLTModelLoss
 from Models.Vocabulary import GlossVocabulary, WordVocabulary, PAD_TOKEN, SIL_TOKEN, BOS_TOKEN, EOS_TOKEN
@@ -32,11 +32,11 @@ def get_data():
     word_vocab = WordVocabulary(DATA_PATH)
 
     # Build Datasets
-    total_train_dataset = SignGlossLanguage(root=DATA_PATH, train=True, download=False,
-                                            word_vocab=word_vocab.vocab, gloss_vocab=gloss_vocab.vocab)
-    train_dataset, valid_dataset = random_split(total_train_dataset,
-                                                [len(total_train_dataset) - VALIDATION_SIZE, VALIDATION_SIZE])
-    test_dataset = SignGlossLanguage(root=DATA_PATH, train=False, download=False,
+    train_dataset = SignGlossLanguage(root=DATA_PATH, type="train", download=False,
+                                      word_vocab=word_vocab.vocab, gloss_vocab=gloss_vocab.vocab)
+    valid_dataset = SignGlossLanguage(root=DATA_PATH, type="dev", download=False,
+                                      word_vocab=word_vocab.vocab, gloss_vocab=gloss_vocab.vocab)
+    test_dataset = SignGlossLanguage(root=DATA_PATH, type="test", download=False,
                                      word_vocab=word_vocab, gloss_vocab=gloss_vocab)
 
     # Data Loaders:
@@ -71,18 +71,17 @@ def train_model():
 
             idx_to_seq = [' '.join([idx_to_words[idx] for idx in seq]) for seq in predict]
             txt_hyp.extend(idx_to_seq)
-            a=1
             # loss = criterion(glosses, words.T, glosses_output, words_output, frames_len, glosses_len)
             # lost_list.append(float(loss) / frames.shape[1])
             # optimizer.zero_grad()
             # loss.backward()
             # optimizer.step()
             if ((iter + 1) % 30) == 0:
-                predict = beam_search(1, frames.shape[0], model, frames, encoder_output, 30, word_vocab[BOS_TOKEN],
-                                      word_vocab[PAD_TOKEN])
+                # predict = greedy(1, frames.shape[0], model, frames, encoder_output, 30, word_vocab[BOS_TOKEN],
+                #                       word_vocab[PAD_TOKEN])
 
-            # predict_2 = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN], word_vocab[EOS_TOKEN],
-            #                    word_vocab[PAD_TOKEN])
+                predict_2 = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN], word_vocab[EOS_TOKEN],
+                               word_vocab[PAD_TOKEN])
 
             loss = criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len)
             norm_loss = loss / glosses.shape[0]

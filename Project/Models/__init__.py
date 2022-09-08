@@ -4,3 +4,4 @@ from .SignGlossLanguage import *
 from .TransformerModel import *
 from .Vocabulary import *
 from .Helper import *
+from .Predictions import *
