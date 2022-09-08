@@ -23,7 +23,7 @@ def beam_search(model, frames, encoder_output, beam_size, sentence_length, bos_i
             words = predict[:, j, :]
             frames_padding_mask = (frames.sum(dim=-1) == 0).squeeze(-1)
             words_padding_mask = (words == pad_index)
-            log_prob_bim = model.decode(words, encoder_output,frames_padding_mask,words_padding_mask)[:, i - 1, :]
+            log_prob_bim = model.decode(words, encoder_output, frames_padding_mask,words_padding_mask)[:, i - 1, :]
             #  log_prob_bim = model.decode(words,encoder_output,  frames_padding_mask,words_padding_mask)[:, i, :]
 
             # for all sent. that are finished - can predicat from now only eos, with not "cost"
