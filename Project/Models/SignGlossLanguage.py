@@ -123,7 +123,8 @@ class SignGlossLanguage(VisionDataset):
                 sign_frames = example["sign"]
                 if sign_frames.shape[0] > self.max_allowed_frames:
                     continue
-                glosses = [gloss_vocab[g] for g in example["gloss"].strip().split(' ')]
+                glosses = [g for g in example["gloss"].strip().split(' ')]
+                glosses = [gloss_vocab[g] for gloss in glosses for g in gloss.split('+')]
                 words = [word_vocab[Vocabulary.BOS_TOKEN]] + \
                         [word_vocab[w] for w in example["text"].replace('.', '').strip().split(' ')] + \
                         [word_vocab[Vocabulary.EOS_TOKEN]]

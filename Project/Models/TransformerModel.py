@@ -14,7 +14,8 @@ class SLTModel(nn.Module):
         return torch.triu(mask, diagonal=1).type(torch.bool)
 
     def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, embedding_dim=512, num_layers_encoder=3,
-                 num_layers_decoder=3, n_head=8, ff_size=2048, drop_p=0.1, spatial_flag=False):
+                 num_layers_decoder=3, n_head=8, ff_size=2048, dropout_encoder=0.1, dropout_decoder=0.1,
+                 spatial_flag=False):
         super(SLTModel, self).__init__()
         self.spatial_flag = spatial_flag
         self.embedding_dim = embedding_dim
@@ -22,8 +23,8 @@ class SLTModel(nn.Module):
                                                                                emb_dim=embedding_dim)
         self.word_padding_index = word_padding_idx
         self.word_embedding = WordEmbedding(padding_idx=word_padding_idx, input_size=words_dim, emb_dim=embedding_dim)
-        self.encoder = Encoder(embedding_dim, num_layers_encoder, n_head, ff_size, drop_p)
-        self.decoder = Decoder(words_dim, embedding_dim, num_layers_decoder, n_head, ff_size, drop_p)
+        self.encoder = Encoder(embedding_dim, num_layers_encoder, n_head, ff_size, dropout_encoder)
+        self.decoder = Decoder(words_dim, embedding_dim, num_layers_decoder, n_head, ff_size, dropout_decoder)
         self.gloss_output_layer = nn.Linear(embedding_dim, gloss_dim)
         self.init_weights()
 
@@ -53,9 +54,10 @@ class SLTModel(nn.Module):
         frames_padding_mask = (frames.sum(dim=-1) == 0).squeeze(-1)
         words_padding_mask = (words == self.word_padding_index)
         encoder_output = self.encode(frames, frames_padding_mask)
-        glosses_prob_output = self.gloss_output_layer(encoder_output).log_softmax(dim=-1)
+        glosses_scores_output = self.gloss_output_layer(encoder_output)
+        glosses_probs_outputs = glosses_scores_output.log_softmax(dim=-1)
         decoder_output = self.decode(words, encoder_output, frames_padding_mask, words_padding_mask)
-        return decoder_output, glosses_prob_output, encoder_output
+        return decoder_output, glosses_probs_outputs, glosses_scores_output, encoder_output
 
 
 class Encoder(nn.Module):
@@ -110,4 +112,3 @@ class PositionalEncoder(nn.Module):
     def forward(self, X):
         X += self.pe[:X.size(0)]
         return self.dropout(X)
-

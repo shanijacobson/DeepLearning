@@ -1,6 +1,7 @@
 from Models.Predictions import beam_search, greedy
+from Models.GlossesTags import get_glosses_tags
 from Models.SignGlossLanguage import SignGlossLanguage
-from Models.SLTModelLoss import SLTModelLoss
+from Models.SLTModelLoss import SLTModelLoss, ModifiedSLTModelLoss
 from Models.Vocabulary import GlossVocabulary, WordVocabulary, PAD_TOKEN, SIL_TOKEN, BOS_TOKEN, EOS_TOKEN
 from torch.utils.data import DataLoader, random_split
 import torch
@@ -52,7 +53,8 @@ def train_model():
     model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
                      word_padding_idx=word_vocab[PAD_TOKEN]).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    criterion = SLTModelLoss(gloss_vocab.get_stoi()[SIL_TOKEN], word_vocab[PAD_TOKEN]).to(DEVICE)
+    gloss_tag = get_glosses_tags(gloss_vocab)
+    criterion = ModifiedSLTModelLoss(gloss_vocab.get_stoi()[SIL_TOKEN], word_vocab[PAD_TOKEN], gloss_tag).to(DEVICE)
     idx_to_words = word_vocab.get_itos()
     iter = 0
     for _ in range(200):
@@ -65,7 +67,7 @@ def train_model():
             frames = frames.to(DEVICE)
             glosses = glosses.to(DEVICE)
             words = words.to(DEVICE)
-            words_output, glosses_output, encoder_output = model(frames, words)
+            words_output, glosses_probs, glosses_scores, encoder_output = model(frames, words)
             predict = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN],
                              word_vocab[EOS_TOKEN], word_vocab[PAD_TOKEN], max_output_length=30)
 
@@ -81,13 +83,14 @@ def train_model():
                 #                       word_vocab[PAD_TOKEN])
 
                 predict_2 = greedy(model, frames, words, encoder_output, word_vocab[BOS_TOKEN], word_vocab[EOS_TOKEN],
-                               word_vocab[PAD_TOKEN])
+                                   word_vocab[PAD_TOKEN])
 
-            loss = criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len)
-            norm_loss = loss / glosses.shape[0]
+            loss = criterion(glosses, words, glosses_scores, words_output, frames_len, glosses_len)
+            total_loss = torch.sum(loss[0]) + torch.sum(loss[1])
+            norm_loss = total_loss / glosses.shape[0]
             optimizer.zero_grad()
             norm_loss.backward()
-            print(loss.cpu().detach().numpy())
+            # print(loss.cpu().detach().numpy())
             optimizer.step()
         print(sum(lost_list))
 

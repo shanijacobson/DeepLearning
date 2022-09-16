@@ -60,6 +60,7 @@ def build_vocab_from_data(root, key, specials, min_freq=1) -> vocab.Vocab:
                 tmp = sample[key].replace('.', '').strip().split(' ')
                 if len(tmp) > 400:
                     continue
+                tmp = [g for t in tmp for g in t.split("+")]
                 counter.update(tmp)
     ordered_dict = OrderedDict(sorted(counter.items(), key=lambda x: (-x[1], x[0])))
     vocabulary = vocab.vocab(ordered_dict, min_freq=min_freq, specials=specials, special_first=True)
