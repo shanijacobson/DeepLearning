@@ -1,5 +1,6 @@
 from typing import Any, Optional, Callable, Tuple
 import torch
+from torch import nn
 import os
 import gzip
 import pickle
@@ -32,7 +33,8 @@ class SignGlossLanguage(VisionDataset):
                  target_transform: Optional[Callable] = None,
                  max_signs_frames=0,
                  max_glosses=0,
-                 max_words=0) -> None:
+                 max_words=0,
+                 emotions_path = None) -> None:
         super().__init__(root, transform=transform, target_transform=target_transform)
         self.root = root
         self.type = type
@@ -50,15 +52,42 @@ class SignGlossLanguage(VisionDataset):
         if not self._check_integrity():
             raise RuntimeError("Dataset not found or corrupted. You can use download=True to download it")
         self.data = self._parser_data(gloss_vocab, word_vocab)
+        
+        if emotions_path is not None:
+            with open(emotions_path, 'rb') as f:
+                self.emotions_dict = pickle.load(f)
+                self.emotions_dict = {key : value for key,value in self.emotions_dict.items() if len(value) > 0}
+                self._convolod_input()
+                self.data = list(filter(lambda x: x["name"].split("/")[1] in self.emotions_dict.keys(),self.data))
+            
+        else:
+            self.emotions_dict  = None
+
+    def _convolod_input(self, kernel=[0.1,0.2,0.4,0.8,0.4,0.2,0.1]):
+        conv = nn.Conv1d(1, 1, 3, stride=1, padding=0,bias=False)
+        kernel = torch.tensor(kernel)
+        kernel /= kernel.sum()
+        conv.weight = torch.nn.Parameter(kernel.view(1,1,-1))
+
+        for path,values in list(self.emotions_dict.items()):
+           # values = torch.tensor(values)
+            if values.shape[0] >= len(kernel):
+                values_for_conv = values.view(torch.tensor(values).shape[0],1,-1).permute(2,1,0).float()
+                temp =  conv(values_for_conv).permute(2,1,0).squeeze().detach()
+                conv_results = torch.concat([values[:len(kernel) - 1] ,temp])
+                self.emotions_dict[path] = conv_results
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
         glosses = sample["glosses"]
         words = sample["words"]
         frames = self._get_videos_frame(sample)
-
         if self.target_transform is not None:
             words = self.target_transform(words)
+        if self.emotions_dict is not None:
+            emotions = torch.tensor(self.emotions_dict[sample["name"].split("/")[1]])
+            emotions = torch.concat([emotions,torch.ones([frames.shape[0] - emotions.shape[0], emotions.shape[1]])])
+            return (frames, sample["frames_len"]), (glosses, sample["glosses_len"]), (words, sample["words_len"]),  emotions
 
         return (frames, sample["frames_len"]), (glosses, sample["glosses_len"]), (words, sample["words_len"])
 

@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 import re
 from itertools import groupby
 from Models import Vocabulary
