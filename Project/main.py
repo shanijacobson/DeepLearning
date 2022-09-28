@@ -1,7 +1,7 @@
 from Models.Predictions import beam_search, greedy
 from Models.GlossesTags import get_glosses_tags
 from Models.SignGlossLanguage import SignGlossLanguage
-from Models.SLTModelLoss import SLTModelLoss, ModifiedSLTModelLoss
+from Models.SLTModelLoss import SLTModelLoss
 from Models.Vocabulary import GlossVocabulary, WordVocabulary, PAD_TOKEN, SIL_TOKEN, BOS_TOKEN, EOS_TOKEN
 from torch.utils.data import DataLoader, random_split
 import torch
@@ -54,7 +54,7 @@ def train_model():
                      word_padding_idx=word_vocab[PAD_TOKEN]).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     gloss_tag = get_glosses_tags(gloss_vocab)
-    criterion = ModifiedSLTModelLoss(gloss_vocab.get_stoi()[SIL_TOKEN], word_vocab[PAD_TOKEN], gloss_tag).to(DEVICE)
+    criterion = SLTModelLoss(gloss_vocab, word_vocab[PAD_TOKEN], tag_booster_factor=0.3).to(DEVICE)
     idx_to_words = word_vocab.get_itos()
     iter = 0
     for _ in range(200):

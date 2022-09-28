@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 from flair.data import Sentence
 from flair.models import SequenceTagger
 
@@ -13,9 +15,14 @@ locations = ['england', 'schottland', 'bremen', 'nordpol', 'brandenburg', 'allga
 numbers = ['zeh', 'fuenf', 'fuenfzehn', 'zwoelf', 'sechszehn', 'hundert', 'fuenfzig', 'dreissig', 'siebte', 'erste', 'zweite', 'sechste', 'zehnte', 'dritte', 'sechshundert', 'fuenfhundert', 'dreihundert', 'zwoelfte', 'elfte', 'elf', 'neunzehnte', 'sechzig', 'vierte', 'achte', 'fuenfte', 'neunte', 'zuerst', 'erst']
 
 TAGS_LIST = ['NULL', 'LTR', 'QST', 'MNT', 'DAY', 'LOC', 'NUM']
+SAVED_MODEL_PATH = "Data/models"
 
 
 def get_glosses_tags(gloss_vocab):
+    path = f"{SAVED_MODEL_PATH}/glosses_tag.npy"
+    if os.path.exists(path):
+        return np.load(path, allow_pickle=True).item()
+
     glosses_idx_list = gloss_vocab.get_itos()
 
     tagger_ner = SequenceTagger.load("flair/ner-german-large")
@@ -66,6 +73,7 @@ def get_glosses_tags(gloss_vocab):
             counter[v] = []
         counter[v].append(k)
 
+    np.save(path, gloss_tag)
     return gloss_tag
 
 
