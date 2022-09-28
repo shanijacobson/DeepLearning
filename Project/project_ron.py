@@ -97,7 +97,7 @@ def calculate_validation_scores(beam_size=None, alpha=0, test=False, iter=0):
             (frames, frames_len), (glosses, glosses_len), (words, words_len) , emo= batch
             (frames, glosses, words, emo) = (frames.to(DEVICE), glosses.to(DEVICE), words.to(DEVICE), emo.to(DEVICE))
             if model.emo_dim > 0:
-                words_output, glosses_output, encoder_output, emo_prob_output , merge_output = model(frames, words)
+                words_output, glosses_prob_output, encoder_output, emo_prob_output , merge_output = model(frames, words)
                 loss, recognition_loss, translation_loss, emo_loss =  criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len,emo,emo_prob_output)
                 total_emo_loss += emo_loss
                 predict_words_list = Predictions.predict_words(model, frames, words, merge_output, word_vocab, beam_size, alpha)
@@ -105,7 +105,7 @@ def calculate_validation_scores(beam_size=None, alpha=0, test=False, iter=0):
 
             else:
                 words_output, glosses_output, encoder_output = model(frames, words)
-                loss, recognition_loss, translation_loss,_ =  criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len)
+                loss, recognition_loss, translation_loss,_ =  criterion(glosses, words, glosses_prob_output, words_output, frames_len, glosses_len)
                 predict_words_list = Predictions.predict_words(model, frames, words, encoder_output, word_vocab, beam_size, alpha)
                 txt_hyp.extend(predict_words_list)
             total_loss += loss

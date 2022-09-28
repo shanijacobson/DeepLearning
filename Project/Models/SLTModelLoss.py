@@ -64,9 +64,8 @@ class EmotionModelLoss(SLTModelLoss):
         self.decoder_train = decoder_train
         self.emo_loss = EmotionLossMasking()
 
-    def forward(self, glosses, words, glosses_scores, words_output, frames_len, glosses_len, emo, emo_outpout):
+    def forward(self, glosses, words, glosses_probs, words_output, frames_len, glosses_len, emo, emo_outpout):
         # Log_probs shape: (input_length, batch_size, gloss_vocab_size)
-        glosses_probs = glosses_scores.log_softmax(dim=-1)
         recognition_loss = self.recognition_loss(glosses_probs.permute(1, 0, 2), glosses, frames_len, glosses_len)
 
         # Input shape: (batch_size, word_vocab_size, input_length)
