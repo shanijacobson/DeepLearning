@@ -7,6 +7,7 @@ from Models import Vocabulary
 
 
 def predict_glosses(idx_to_glosses, gloss_probabilities, frames_len, beam_size=1):
+    tf.config.set_visible_devices([], 'GPU')
     gloss_probabilities = gloss_probabilities.permute(1, 0, 2).cpu().detach().numpy()
     frames_len = frames_len.cpu().detach().numpy()
     tf_gloss_probabilities = np.concatenate(
