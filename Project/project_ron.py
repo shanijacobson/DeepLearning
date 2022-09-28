@@ -15,6 +15,8 @@ import sys
 import numpy as np
 from torch.utils.data import DataLoader, random_split
 
+from Models.STLModel import SLTEmotionsModel
+
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #DEVICE = torch.device("cpu")
 
@@ -44,7 +46,7 @@ import Models
 """## **Load Data**"""
 
 # Commented out IPython magic to ensure Python compatibility.
-from Models import Vocabulary
+from Models import Vocabulary, EmotionModelLoss
 from Models import SignGlossLanguage
 
 # %cd gdrive/MyDrive/DeepLearing/Project
@@ -253,14 +255,14 @@ def fit(model_name):
         epoch += 1
 
 
-model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab), 
+model = SLTEmotionsModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
                 num_layers_encoder=3, num_layers_decoder=3,num_layers_emo=2,emo_dim=7,
                 word_padding_idx=word_vocab[Vocabulary.PAD_TOKEN]).to(DEVICE)
 optimizer = Adam(model.parameters(), lr=0.001, 
                 weight_decay=0.001, eps=1.0e-8, amsgrad=False)
 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", threshold_mode="abs", 
                                             verbose=False, factor=0.5, patience=5)
-criterion = SLTModelLoss(gloss_blank_index=gloss_vocab[Vocabulary.SIL_TOKEN], 
+criterion = EmotionModelLoss(gloss_vocab=gloss_vocab,
                             gloss_loss_weight = 5, word_loss_weight = 1, emo_loss_weight=10,
                             word_ignore_index=word_vocab[Vocabulary.PAD_TOKEN],emo_train=300,gloss_train=0,decoder_train=0).to(DEVICE)
 writer = SummaryWriter(log_dir = f"runs/test")                     

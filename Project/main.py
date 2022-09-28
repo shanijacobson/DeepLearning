@@ -1,11 +1,11 @@
 from Models.Predictions import beam_search, greedy
 from Models.GlossesTags import get_glosses_tags
 from Models.SignGlossLanguage import SignGlossLanguage
-from Models.SLTModelLoss import SLTModelLoss
+from Models.SLTModelLoss import SLTModelLoss, BoosterModelLoss
 from Models.Vocabulary import GlossVocabulary, WordVocabulary, PAD_TOKEN, SIL_TOKEN, BOS_TOKEN, EOS_TOKEN
 from torch.utils.data import DataLoader, random_split
 import torch
-from Models.TransformerModel import SLTModel
+from Models.STLModel import SLTModel
 import os
 
 DATA_PATH = os.path.join("Data", "Phoenix14")
@@ -53,8 +53,7 @@ def train_model():
     model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
                      word_padding_idx=word_vocab[PAD_TOKEN]).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    gloss_tag = get_glosses_tags(gloss_vocab)
-    criterion = SLTModelLoss(gloss_vocab, word_vocab[PAD_TOKEN], tag_booster_factor=0.3).to(DEVICE)
+    criterion = BoosterModelLoss(gloss_vocab, word_vocab[PAD_TOKEN]).to(DEVICE)
     idx_to_words = word_vocab.get_itos()
     iter = 0
     for _ in range(200):
