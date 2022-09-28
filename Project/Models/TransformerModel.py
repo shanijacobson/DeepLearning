@@ -28,7 +28,7 @@ class SLTModel(nn.Module):
         self.gloss_output_layer = nn.Linear(embedding_dim, gloss_dim)
         if emo_dim > 0:
             self.encoder_emo = Encoder(embedding_dim, num_layers_emo, n_head, ff_size, drop_p)
-            self.merger = Merger(embedding_dim,2)
+            self.merger = Merger(embedding_dim,drop_p,2)
             self.emo_output_layer= nn.Linear(embedding_dim, emo_dim)
 
         self.init_weights()
@@ -68,8 +68,9 @@ class SLTModel(nn.Module):
             glosses_prob_output = self.gloss_output_layer(encoder_output).log_softmax(dim=-1)
             emo_prob_output = self.emo_output_layer(emo_output).log_softmax(dim=-1)
             merge_output  = self.merger(encoder_output, emo_output)#.to(words.get_device())
+            #merge_output =  torch.concat([encoder_output,emo_output],dim=-1).to(encoder_output.device)
             decoder_output = self.decode(words, merge_output, frames_padding_mask, words_padding_mask)
-            return decoder_output, glosses_prob_output, encoder_output, emo_prob_output
+            return decoder_output, glosses_prob_output, encoder_output, emo_prob_output , merge_output
        
         encoder_output  = self.encode(frames, frames_padding_mask)
         glosses_prob_output = self.gloss_output_layer(encoder_output).log_softmax(dim=-1)
@@ -94,16 +95,18 @@ class Encoder(nn.Module):
         return self.transformer_encoder(output, src_key_padding_mask=frames_padding_mask)
 
 class Merger(nn.Module):
-    def __init__(self, dim, num_layers=1):
+    def __init__(self, dim,drop_p, num_layers=1):
         super(Merger, self).__init__()
         self.num_layers = num_layers
         self.layer1 = nn.Sequential(
             nn.Linear(in_features=2 * dim, out_features=dim),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(drop_p)
         )
         self.layers_list =  nn.ModuleList([nn.Sequential(
             nn.Linear(in_features= dim, out_features=dim),
-            nn.ReLU()
+            nn.ReLU(),
+            nn.Dropout(drop_p)
         ) for _ in range(num_layers-1)])
 
     def forward(self, embedded_frames, emo_frames):

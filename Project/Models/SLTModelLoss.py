@@ -3,13 +3,14 @@ from torch import nn
 import torch
 
 class SLTModelLoss(nn.Module):
-    def __init__(self, gloss_blank_index, word_ignore_index, gloss_loss_weight=1.0, word_loss_weight=1.0, emo_loss_weight = 0, emo_train = 0, gloss_train = 0):
+    def __init__(self, gloss_blank_index, word_ignore_index, gloss_loss_weight=1.0, word_loss_weight=1.0, emo_loss_weight = 0, emo_train = 0, gloss_train = 0,decoder_train = 0):
         super().__init__()
         self.gloss_loss_weight = gloss_loss_weight
         self.word_loss_weight = word_loss_weight
         self.emo_loss_weight = emo_loss_weight
         self.emo_train = emo_train
         self.gloss_train = gloss_train
+        self.decoder_train = decoder_train
         self.recognition_loss = nn.CTCLoss(reduction="sum", blank=gloss_blank_index, zero_infinity=True)
         self.translation_loss = nn.NLLLoss(reduction="sum", ignore_index=word_ignore_index)
         self.emo_loss = EmoationLossMasking()
@@ -22,18 +23,25 @@ class SLTModelLoss(nn.Module):
         translation_loss = self.translation_loss(input=words_output.permute(0, 2, 1), target=words)
         translation_loss = self.translation_loss(input=words_output.permute(0, 2, 1)[:, :, :-1], target=words[:, 1:])
         # return total loss, loss recognition and loss translation (for logging)
-        if self.gloss_train > 0:
-            self.gloss_train -= 1
-            return  self.gloss_loss_weight * recognition_loss, recognition_loss, translation_loss, None
 
         if emo is not None:
             emo_loss = self.emo_loss(emo,emo_outpout,frames_len)
             if self.emo_train > 0:
                  self.emo_train -= 1
-                 return  self.emo_loss_weight * emo_loss, recognition_loss, translation_loss ,emo_loss
+                 return  self.emo_loss_weight * emo_loss, 0, 0 ,emo_loss
 
-            return self.gloss_loss_weight * recognition_loss + self.word_loss_weight * translation_loss  + self.emo_loss_weight * emo_loss, recognition_loss, translation_loss ,emo_loss
-        return self.gloss_loss_weight * recognition_loss + self.word_loss_weight * translation_loss, recognition_loss, translation_loss, None
+        else:
+            emo_loss = 0       
+        
+        if self.gloss_train > 0:
+            self.gloss_train -= 1
+            return  self.gloss_loss_weight * recognition_loss, recognition_loss, 0, 0
+
+        if self.decoder_train > 0 :
+            self.decoder_train -= 1
+            return  self.word_loss_weight * translation_loss , 0, translation_loss, 0
+
+        return self.gloss_loss_weight * recognition_loss + self.word_loss_weight * translation_loss + self.emo_loss_weight * emo_loss, recognition_loss, translation_loss, emo_loss
 
 
 

@@ -70,7 +70,7 @@ class SignGlossLanguage(VisionDataset):
         conv.weight = torch.nn.Parameter(kernel.view(1,1,-1))
 
         for path,values in list(self.emotions_dict.items()):
-           # values = torch.tensor(values)
+            values = torch.tensor(values)
             if values.shape[0] >= len(kernel):
                 values_for_conv = values.view(torch.tensor(values).shape[0],1,-1).permute(2,1,0).float()
                 temp =  conv(values_for_conv).permute(2,1,0).squeeze().detach()
