@@ -151,13 +151,13 @@ class SignGlossLanguage(VisionDataset):
                 video_name = example["name"]
                 if video_name in samples.keys():
                     raise RuntimeError(f"Please check {video_name}")
-                sign_frames = example["sign"]
+                sign_frames = example["sign"] + 1e-8  # numerical stability
                 if sign_frames.shape[0] > self.max_allowed_frames:
                     continue
-                glosses = [g for g in example["gloss"].strip().split(' ')]
-                glosses = [gloss_vocab[g] for gloss in glosses for g in gloss.split('+')]
+                glosses = [gloss_vocab[g] for g in example["gloss"].strip().split(' ')]
+                # glosses = [gloss_vocab[g] for gloss in glosses for g in gloss.split('+')]
                 words = [word_vocab[Vocabulary.BOS_TOKEN]] + \
-                        [word_vocab[w] for w in example["text"].replace('.', '').strip().split(' ')] + \
+                        [word_vocab[w] for w in example["text"].strip().split(' ')] + \
                         [word_vocab[Vocabulary.EOS_TOKEN]]
                 samples[video_name] = {"name": video_name,
                                        "singer": example["signer"],

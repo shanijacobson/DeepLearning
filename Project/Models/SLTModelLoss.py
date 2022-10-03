@@ -11,7 +11,7 @@ class SLTModelLoss(nn.Module):
         self.gloss_blank_index = gloss_vocab[Vocabulary.SIL_TOKEN]
         self.gloss_loss_weight = gloss_loss_weight
         self.word_loss_weight = word_loss_weight
-        self.recognition_loss = nn.CTCLoss(reduction="sum", blank=self.gloss_blank_index, zero_infinity=True)
+        self.recognition_loss = nn.CTCLoss(blank=self.gloss_blank_index, zero_infinity=True)
         self.translation_loss = nn.NLLLoss(reduction="sum", ignore_index=word_ignore_index)
 
     def forward(self, glosses, words, glosses_scores, words_output, frames_len, glosses_len):
@@ -20,6 +20,7 @@ class SLTModelLoss(nn.Module):
 
         # Input shape: (batch_size, word_vocab_size, input_length)
         translation_loss = self.translation_loss(input=words_output.permute(0, 2, 1)[:, :, :-1], target=words[:, 1:])
+        translation_loss /= words.shape[0]
         return self.gloss_loss_weight * recognition_loss + self.word_loss_weight * translation_loss, recognition_loss, translation_loss
 
 

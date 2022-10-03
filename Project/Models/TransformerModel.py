@@ -11,7 +11,7 @@ class Encoder(nn.Module):
         self.emb_dropout = nn.Dropout(drop_p)
         self.pos_encoder = PositionalEncoder(embedding_dim, drop_p)
         encoder_layers = TransformerEncoderLayer(d_model=embedding_dim, nhead=n_head, dim_feedforward=ff_size,
-                                                 dropout=drop_p, batch_first=True)
+                                                 dropout=drop_p, batch_first=True, norm_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers,
                                                       norm=nn.LayerNorm(embedding_dim, eps=1e-6))
 
@@ -49,7 +49,7 @@ class Decoder(nn.Module):
     def __init__(self, words_dim, embedding_dim, num_layers, n_head, ff_size, drop_p):
         super(Decoder, self).__init__()
         decoder_layers = TransformerDecoderLayer(d_model=embedding_dim, nhead=n_head, dim_feedforward=ff_size,
-                                                 dropout=drop_p, batch_first=True)
+                                                 dropout=drop_p, batch_first=True, norm_first=True)
         self.pos_encoding = PositionalEncoder(embedding_dim, drop_p)
         self.emb_dropout = nn.Dropout(drop_p)
         self.transformer_decoder = TransformerDecoder(decoder_layers, num_layers,

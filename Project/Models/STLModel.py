@@ -15,7 +15,7 @@ class SLTModel(nn.Module):
         return torch.triu(mask, diagonal=1).type(torch.bool)
 
     def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, embedding_dim=512,
-                 num_layers_encoder=2, num_layers_decoder=2, n_head=8, ff_size=2048, dropout_encoder=0.1,
+                 num_layers_encoder=3, num_layers_decoder=3, n_head=8, ff_size=2048, dropout_encoder=0.1,
                  dropout_decoder=0.1, spatial_flag=False):
         super(SLTModel, self).__init__()
         self.spatial_flag = spatial_flag
@@ -31,11 +31,15 @@ class SLTModel(nn.Module):
 
     def init_weights(self):
         init_gain = 1.0
-        for m in self.modules():
-            if hasattr(m, 'bias'):
-                m.bias.data.zero_()
-            if hasattr(m, 'weight') and len(m.weight.shape) > 1:
-                nn.init.xavier_uniform_(m.weight, gain=init_gain)
+        with torch.no_grad():
+            for name, p in self.named_parameters():
+                if "bias" in name:
+                    nn.init.zeros_(p)
+                    # m.bias.data.zero_()
+                elif len(p.size()) > 1:
+                    nn.init.xavier_uniform_(p.data, gain=init_gain)
+            # zero out paddings
+            self.word_embedding.embedding.weight.data[self.word_padding_index].zero_()
 
     def encode(self, frames, frames_padding_mask):
         if self.spatial_flag:

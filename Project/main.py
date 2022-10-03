@@ -1,5 +1,5 @@
 from Models.Predictions import beam_search, greedy
-from Models.GlossesTags import get_glosses_tags
+from Models.GlossesTags import get_glosses_tags, manually
 from Models.SignGlossLanguage import SignGlossLanguage
 from Models.SLTModelLoss import SLTModelLoss, BoosterModelLoss
 from Models.Vocabulary import GlossVocabulary, WordVocabulary, PAD_TOKEN, SIL_TOKEN, BOS_TOKEN, EOS_TOKEN
@@ -52,7 +52,7 @@ def train_model():
 
     model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
                      word_padding_idx=word_vocab[PAD_TOKEN]).to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = BoosterModelLoss(gloss_vocab, word_vocab[PAD_TOKEN]).to(DEVICE)
     idx_to_words = word_vocab.get_itos()
     iter = 0
@@ -96,3 +96,12 @@ def train_model():
 
 if __name__ == '__main__':
     train_model()
+    gloss_vocab = GlossVocabulary(DATA_PATH)
+    word_vocab = WordVocabulary(DATA_PATH)
+    train_dataset = SignGlossLanguage(root=DATA_PATH, type="train", download=False,
+                                      word_vocab=word_vocab.vocab, gloss_vocab=gloss_vocab.vocab)
+    glosses_to_idx = gloss_vocab.get_itos()
+    glosses = [[glosses_to_idx[idx] for idx in d["glosses"] if idx != 2] for d in train_dataset.data]
+    manually(gloss_vocab)
+    a=1
+    #train_model()
