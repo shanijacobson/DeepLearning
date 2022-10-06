@@ -1,5 +1,6 @@
 from typing import Any, Optional, Callable, Tuple
 import torch
+import numpy as np
 from torch import nn
 import os
 import gzip
@@ -34,7 +35,9 @@ class SignGlossLanguage(VisionDataset):
                  max_signs_frames=0,
                  max_glosses=0,
                  max_words=0,
-                 emotions_path=None) -> None:
+                 feature_path=None,
+                 do_conv = True,
+                 poses_flag = False) -> None:
         super().__init__(root, transform=transform, target_transform=target_transform)
         self.root = root
         self.type = type
@@ -53,15 +56,29 @@ class SignGlossLanguage(VisionDataset):
             raise RuntimeError("Dataset not found or corrupted. You can use download=True to download it")
         self.data = self._parser_data(gloss_vocab, word_vocab)
 
-        if emotions_path is not None:
-            with open(emotions_path, 'rb') as f:
-                self.emotions_dict = pickle.load(f)
-                self.emotions_dict = {key: value for key, value in self.emotions_dict.items() if len(value) > 0}
-                self._convolod_input()
-                self.data = list(filter(lambda x: x["name"].split("/")[1] in self.emotions_dict.keys(), self.data))
+        if feature_path is not None:
+            with open(feature_path, 'rb') as f:
+                self.features = pickle.load(f)
+                if poses_flag:
+                    self._format_poses()
+
+                self.features = {key: value for key, value in self.features.items() if len(value) > 0}
+                if do_conv:
+                    self._convolod_input()
+
+                self.data = list(filter(lambda x: x["name"].split("/")[1] in self.features.keys(), self.data))
 
         else:
-            self.emotions_dict = None
+            self.features = None
+
+    def _format_poses(self, dim=3):
+        for key, value in self.features.items():
+            results = []
+            for frame in value:
+                frame = [vec[:dim] for vec in frame]
+                frame = np.array(frame)
+                results.append(frame.reshape(frame.shape[0] * frame.shape[1]).astype(np.float32))
+            self.features[key] = torch.tensor(results)
 
     def _convolod_input(self, kernel=[0.1, 0.2, 0.4, 0.8, 0.4, 0.2, 0.1]):
         conv = nn.Conv1d(1, 1, 3, stride=1, padding=0, bias=False)
@@ -69,13 +86,13 @@ class SignGlossLanguage(VisionDataset):
         kernel /= kernel.sum()
         conv.weight = torch.nn.Parameter(kernel.view(1, 1, -1))
 
-        for path, values in list(self.emotions_dict.items()):
+        for path, values in list(self.features.items()):
             values = torch.tensor(values)
             if values.shape[0] >= len(kernel):
                 values_for_conv = values.view(torch.tensor(values).shape[0], 1, -1).permute(2, 1, 0).float()
                 temp = conv(values_for_conv).permute(2, 1, 0).squeeze().detach()
                 conv_results = torch.concat([values[:len(kernel) - 1], temp])
-                self.emotions_dict[path] = conv_results
+                self.features[path] = conv_results
 
     def __getitem__(self, index: int) -> Tuple[Any, Any, Any]:
         sample = self.data[index]
@@ -84,11 +101,11 @@ class SignGlossLanguage(VisionDataset):
         frames = self._get_videos_frame(sample)
         if self.target_transform is not None:
             words = self.target_transform(words)
-        if self.emotions_dict is not None:
-            emotions = torch.tensor(self.emotions_dict[sample["name"].split("/")[1]])
-            emotions = torch.concat([emotions, torch.ones([frames.shape[0] - emotions.shape[0], emotions.shape[1]])])
+        if self.features is not None:
+            features = torch.tensor(self.features[sample["name"].split("/")[1]])
+            features = torch.concat([features, torch.ones([frames.shape[0] - features.shape[0], features.shape[1]])])
             return (frames, sample["frames_len"]), (glosses, sample["glosses_len"]), (
-            words, sample["words_len"]), emotions
+            words, sample["words_len"]), features
 
         return (frames, sample["frames_len"]), (glosses, sample["glosses_len"]), (words, sample["words_len"])
 

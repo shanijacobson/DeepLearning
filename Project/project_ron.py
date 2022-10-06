@@ -15,7 +15,7 @@ import sys
 import numpy as np
 from torch.utils.data import DataLoader, random_split
 
-from Models.STLModel import SLTEmotionsModel
+from Models.STLModel import SLTEfeaturesModel
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 #DEVICE = torch.device("cpu")
@@ -25,6 +25,8 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 DATA_PATH = os.path.join("Data", "Phoenix14")
 emotions_val= os.path.join("Data", "Phoenix14","emothins.pkl")
 emotions_train= os.path.join("Data", "Phoenix14","emothins_train.pkl")
+poses_val= os.path.join("Data", "Phoenix14","poses_val.pkl")
+poses_train= os.path.join("Data", "Phoenix14","poses_train.pkl")
 SAVED_MODELS_PATH = "Data/models"
 VALIDATION_SIZE = 520
 BATCH_SIZE = 32
@@ -46,7 +48,7 @@ import Models
 """## **Load Data**"""
 
 # Commented out IPython magic to ensure Python compatibility.
-from Models import Vocabulary, EmotionModelLoss
+from Models import Vocabulary, FeatureModelLoss
 from Models import SignGlossLanguage
 
 # %cd gdrive/MyDrive/DeepLearing/Project
@@ -58,9 +60,9 @@ word_vocab = Vocabulary.WordVocabulary(DATA_PATH)
 # Build Datasets
 
 train_dataset = SignGlossLanguage(root=DATA_PATH, type="train", download=False,
-                                  word_vocab=word_vocab, gloss_vocab=gloss_vocab, emotions_path=emotions_train)
+                                  word_vocab=word_vocab, gloss_vocab=gloss_vocab, feature_path = poses_train,poses_flag=True)
 valid_dataset = SignGlossLanguage(root=DATA_PATH, type="dev", download=False,
-                                  word_vocab=word_vocab, gloss_vocab=gloss_vocab,emotions_path = emotions_val)
+                                  word_vocab=word_vocab, gloss_vocab=gloss_vocab,feature_path = poses_val,poses_flag=True)
 test_dataset = SignGlossLanguage(root=DATA_PATH, type="test", download=False,
                                  word_vocab=word_vocab, gloss_vocab=gloss_vocab)
 
@@ -84,7 +86,7 @@ def calculate_validation_scores(beam_size=None, alpha=0, test=False, iter=0):
     total_loss = 0
     total_recognition_loss = 0
     total_translation_loss = 0
-    total_emo_loss = 0
+    total_features_loss = 0
     temp_device = torch.device("cpu")
 
     with torch.no_grad():
@@ -94,18 +96,18 @@ def calculate_validation_scores(beam_size=None, alpha=0, test=False, iter=0):
         gls_hyp = []
         data_loader = test_loader if test else validation_loader
         for batch in data_loader:
-            (frames, frames_len), (glosses, glosses_len), (words, words_len) , emo= batch
-            (frames, glosses, words, emo) = (frames.to(DEVICE), glosses.to(DEVICE), words.to(DEVICE), emo.to(DEVICE))
-            if model.emo_dim > 0:
-                words_output, glosses_prob_output, encoder_output, emo_prob_output , merge_output = model(frames, words)
-                loss, recognition_loss, translation_loss, emo_loss =  criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len,emo,emo_prob_output)
-                total_emo_loss += emo_loss
+            (frames, frames_len), (glosses, glosses_len), (words, words_len) , features = batch
+            (frames, glosses, words, features) = (frames.to(DEVICE), glosses.to(DEVICE), words.to(DEVICE), features.to(DEVICE))
+            if type(model) == SLTEfeaturesModel:
+                words_output, glosses_prob_output, encoder_output, features_prob_output , merge_output = model(frames, words)
+                loss, recognition_loss, translation_loss, features_loss =  criterion(glosses, words, glosses_prob_output, words_output, frames_len, glosses_len,features,features_prob_output)
+                total_features_loss += features_loss
                 predict_words_list = Predictions.predict_words(model, frames, words, merge_output, word_vocab, beam_size, alpha)
                 txt_hyp.extend(predict_words_list)
 
             else:
-                words_output, glosses_output, encoder_output = model(frames, words)
-                loss, recognition_loss, translation_loss,_ =  criterion(glosses, words, glosses_prob_output, words_output, frames_len, glosses_len)
+                words_output, glosses_prob_output, encoder_output = model(frames, words)
+                loss, recognition_loss, translation_loss =  criterion(glosses, words, glosses_prob_output, words_output, frames_len, glosses_len)
                 predict_words_list = Predictions.predict_words(model, frames, words, encoder_output, word_vocab, beam_size, alpha)
                 txt_hyp.extend(predict_words_list)
             total_loss += loss
@@ -122,22 +124,21 @@ def calculate_validation_scores(beam_size=None, alpha=0, test=False, iter=0):
             gls_ref.extend(real_gloss_list)
             #predict_words_list = Predictions.predict_words(model, frames, words, encoder_output, word_vocab, beam_size, alpha)
            # txt_hyp.extend(predict_words_list)
-            predict_glosses_list = Predictions.predict_glosses(idx_to_glosses, glosses_output, frames_len, beam_size=1)
+            predict_glosses_list = Predictions.predict_glosses(idx_to_glosses, glosses_prob_output, frames_len, beam_size=1)
             gls_hyp.extend(predict_glosses_list)
-            print(real_words_list[0][0])
-            print(predict_words_list[0])
+            #print(real_words_list[0][0])
+            #print(predict_words_list[0])
 
 
     validation_bleu_score = bleu_score(txt_hyp, txt_ref, max_n=4)
     validation_wer_score = word_error_rate(gls_hyp, gls_ref)
-    total_loss /= VALIDATION_SIZE
-    total_recognition_loss /= VALIDATION_SIZE
-    total_translation_loss /= VALIDATION_SIZE
-    if total_translation_loss <= 41 and criterion.emo_train <= 0:
-        flag = 1
-    if model.emo_dim > 0:
-        total_emo_loss /= VALIDATION_SIZE
-        print(f"total_emo_loss : {total_emo_loss * criterion.emo_loss_weight },total_recognition_loss : {total_recognition_loss * criterion.gloss_loss_weight},total_translation_loss : {total_translation_loss * criterion.word_loss_weight}" )
+    #total_loss /= VALIDATION_SIZE
+    #total_recognition_loss /= VALIDATION_SIZE
+    #total_translation_loss /= VALIDATION_SIZE
+
+    if type(model) == SLTEfeaturesModel:
+     #   total_emo_loss /= VALIDATION_SIZE
+        print(f"total_features_loss : {total_features_loss * criterion.feature_loss_weight },total_recognition_loss : {total_recognition_loss * criterion.gloss_loss_weight},total_translation_loss : {total_translation_loss * criterion.word_loss_weight}" )
     else:
 
         print(f"total_recognition_loss : {total_recognition_loss * criterion.gloss_loss_weight},total_translation_loss : {total_translation_loss * criterion.word_loss_weight}" )
@@ -153,20 +154,19 @@ def calculate_validation_scores(beam_size=None, alpha=0, test=False, iter=0):
 
 def train_on_batch(batch, iter):
     model.train()
-    (frames, frames_len), (glosses, glosses_len), (words, words_len), emo = batch
-    (frames, glosses, words, emo) = (frames.to(DEVICE), glosses.to(DEVICE), words.to(DEVICE), emo.to(DEVICE))
+    (frames, frames_len), (glosses, glosses_len), (words, words_len), features = batch
+    (frames, glosses, words, features) = (frames.to(DEVICE), glosses.to(DEVICE), words.to(DEVICE), features.to(DEVICE))
     
-    if model.emo_dim > 0:
-        words_output, glosses_output, _, emo_prob_output ,_= model(frames, words)
-        total_loss, recognition_loss, translation_loss, _ =  criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len,emo,emo_prob_output)
+    if type(model) == SLTEfeaturesModel:
+        words_output, glosses_prob_output, _, features_prob_output ,_= model(frames, words)
+        total_loss, recognition_loss, translation_loss, _ =  criterion(glosses, words, glosses_prob_output, words_output, frames_len, glosses_len,features,features_prob_output)
 
     else:
-        words_output, glosses_output, _ = model(frames, words)
-        total_loss, recognition_loss, translation_loss, _ =  criterion(glosses, words, glosses_output, words_output, frames_len, glosses_len)
+        words_output, glosses_prob_output, _ = model(frames, words)
+        total_loss, recognition_loss, translation_loss =  criterion(glosses, words, glosses_prob_output, words_output, frames_len, glosses_len)
     
-    norm_loss = (total_loss.double() / glosses.shape[0]).double()
     optimizer.zero_grad()
-    norm_loss.backward()
+    total_loss.backward()
     optimizer.step()
     writer.add_scalar("total_loss/train", total_loss / frames.shape[0], iter)
     writer.add_scalar("recognition_loss/train", recognition_loss / frames.shape[0], iter) 
@@ -208,15 +208,16 @@ def fit(model_name):
                 prev_lr = optimizer.param_groups[0]["lr"]
                 scheduler.step(validation_bleu_score) 
                 new_lr = optimizer.param_groups[0]["lr"]
-                if criterion.emo_train == 0:
-                    optimizer.param_groups[0]["lr"] = 0.001
-                    criterion.emo_train = -1
-                if criterion.gloss_train == 0:
-                    optimizer.param_groups[0]["lr"] = 0.001
-                    criterion.gloss_train = -1
-                if criterion.decoder_train == 0:
-                    optimizer.param_groups[0]["lr"] = 0.001
-                    criterion.decoder_train = -1
+                if type(model) == SLTEfeaturesModel:
+                    if criterion.feature_train == 0:
+                        optimizer.param_groups[0]["lr"] = 0.001
+                        criterion.feature_train = -1
+                    if criterion.gloss_train == 0:
+                        optimizer.param_groups[0]["lr"] = 0.001
+                        criterion.gloss_train = -1
+                    if criterion.decoder_train == 0:
+                        optimizer.param_groups[0]["lr"] = 0.001
+                        criterion.decoder_train = -1
                 if validation_bleu_score > best_bleu_score:
                     print(f"new best validation bleu score! validation loss: {validation_loss}, bleu score: {validation_bleu_score}, wer score: {validation_wer_score}")
                     best_bleu_score = validation_bleu_score
@@ -233,9 +234,9 @@ def fit(model_name):
                     print(f"new lr: {new_lr}")
                     if  best_bleu_score > 0.12 and best_lr != prev_lr:
                         stop = True
-                print(f"bleu score: {validation_bleu_score}, wer score: {validation_wer_score}")
+            print(f"bleu score: {validation_bleu_score}, wer score: {validation_wer_score}")
 
-                print(f"Epoch: {epoch}, Train loss: {epoch_loss / len(train_dataset)}, Validation loss: {validation_loss}")
+            print(f"Epoch: {epoch}, Train loss: {epoch_loss }, Validation loss: {validation_loss}")
 
             epoch_loss += train_on_batch(batch, iter)
            # if optimizer.param_groups[0]["lr"] < MINIMUM_LR or iter > 100:
@@ -255,16 +256,26 @@ def fit(model_name):
         epoch += 1
 
 
-model = SLTEmotionsModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
-                num_layers_encoder=3, num_layers_decoder=3,num_layers_emo=2,emo_dim=7,
-                word_padding_idx=word_vocab[Vocabulary.PAD_TOKEN]).to(DEVICE)
+model = SLTEfeaturesModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
+                num_layers_encoder=3, num_layers_decoder=3,num_layers_features=2,features_dim=99,dropout_decoder = 0.3,dropout_encoder = 0.2,
+                word_padding_idx=word_vocab[Vocabulary.PAD_TOKEN], poses_flag=True).to(DEVICE)
+
+# model = SLTModel(frame_size=1024, gloss_dim=len(gloss_vocab), words_dim=len(word_vocab),
+#                 num_layers_encoder=3, num_layers_decoder=3,dropout_decoder = 0.3,
+#                 word_padding_idx=word_vocab[Vocabulary.PAD_TOKEN]).to(DEVICE)
+
 optimizer = Adam(model.parameters(), lr=0.001, 
                 weight_decay=0.001, eps=1.0e-8, amsgrad=False)
 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", threshold_mode="abs", 
-                                            verbose=False, factor=0.5, patience=5)
-criterion = EmotionModelLoss(gloss_vocab=gloss_vocab,
-                            gloss_loss_weight = 5, word_loss_weight = 1, emo_loss_weight=10,
-                            word_ignore_index=word_vocab[Vocabulary.PAD_TOKEN],emo_train=300,gloss_train=0,decoder_train=0).to(DEVICE)
+                                            verbose=False, factor=0.7, patience=8)
+criterion = FeatureModelLoss(gloss_vocab=gloss_vocab,
+                            gloss_loss_weight = 5, word_loss_weight = 1, feature_loss_weight=0.01,
+                            word_ignore_index=word_vocab[Vocabulary.PAD_TOKEN],feature_train=1000,gloss_train=0,decoder_train=0,poses_flag= True).to(DEVICE)
+
+# criterion = SLTModelLoss(gloss_vocab=gloss_vocab,
+#                              gloss_loss_weight = 5, word_loss_weight = 1,
+#                              word_ignore_index=word_vocab[Vocabulary.PAD_TOKEN]).to(DEVICE)
+                             
 writer = SummaryWriter(log_dir = f"runs/test")                     
 #calculate_validation_scores(1)
 fit("test")

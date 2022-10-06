@@ -62,20 +62,21 @@ class SLTModel(nn.Module):
         glosses_scores_output = self.gloss_output_layer(encoder_output)
         glosses_probs_outputs = glosses_scores_output.log_softmax(dim=-1)
         decoder_output = self.decode(words, encoder_output, frames_padding_mask, words_padding_mask)
-        return decoder_output, glosses_probs_outputs, glosses_scores_output, encoder_output
+        return decoder_output, glosses_probs_outputs, encoder_output
 
 
-class SLTEmotionsModel(SLTModel):
-    def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, emo_dim=0, embedding_dim=512,
-                 num_layers_encoder=2, num_layers_emo=2, num_layers_decoder=2, n_head=8, ff_size=2048,
-                 dropout_encoder=0.1, dropout_decoder=0.1, spatial_flag=False):
+class SLTEfeaturesModel(SLTModel):
+    def __init__(self, frame_size, gloss_dim, words_dim, word_padding_idx, features_dim=0, embedding_dim=512,
+                 num_layers_encoder=2, num_layers_features=2, num_layers_decoder=2, n_head=8, ff_size=2048,
+                 dropout_encoder=0.1, dropout_decoder=0.1, spatial_flag=False,poses_flag =False):
         super().__init__(frame_size, gloss_dim, words_dim, word_padding_idx, embedding_dim,
                          num_layers_encoder, num_layers_decoder, n_head, ff_size,
                          dropout_encoder, dropout_decoder, spatial_flag)
-        self.emo_dim = emo_dim
-        self.emotions_encoder = Encoder(embedding_dim, num_layers_emo, n_head, ff_size, dropout_encoder)
+        self.features_dim = features_dim
+        self.poses_flag = poses_flag
+        self.features_encoder = Encoder(embedding_dim, num_layers_features, n_head, ff_size, dropout_encoder)
         self.merger = Merger(embedding_dim, dropout_encoder, 2)
-        self.emo_output_layer = nn.Linear(embedding_dim, emo_dim)
+        self.features_output_layer = nn.Linear(embedding_dim, self.features_dim)
         self.init_weights()
 
     def encode(self, frames, frames_padding_mask):
@@ -84,18 +85,20 @@ class SLTEmotionsModel(SLTModel):
         else:
             embedded_frames = self.frame_embedding(frames.squeeze(dim=2), frames_padding_mask)
         glosses_encoder_output = self.encoder(embedded_frames, frames_padding_mask)
-        emotions_encoder_output = self.emotions_encoder(embedded_frames, frames_padding_mask)
-        return glosses_encoder_output, emotions_encoder_output
+        features_encoder_output = self.features_encoder(embedded_frames, frames_padding_mask)
+        return glosses_encoder_output, features_encoder_output
 
     def forward(self, frames, words):
         frames_padding_mask = (frames.sum(dim=-1) == 0).squeeze(-1)
         words_padding_mask = (words == self.word_padding_index)
 
-        encoder_output, emo_output = self.encode(frames, frames_padding_mask)
+        encoder_output, features_output = self.encode(frames, frames_padding_mask)
         glosses_prob_output = self.gloss_output_layer(encoder_output).log_softmax(dim=-1)
-        emo_prob_output = self.emo_output_layer(emo_output).log_softmax(dim=-1)
-        merge_output = self.merger(encoder_output, emo_output)  # .to(words.get_device())
+        features_prob_output = self.features_output_layer(features_output)
+        if not self.poses_flag:
+            features_prob_output = features_prob_output.log_softmax(dim=-1)
+        merge_output = self.merger(encoder_output, features_output)  # .to(words.get_device())
         # merge_output =  torch.concat([encoder_output,emo_output],dim=-1).to(encoder_output.device)
         decoder_output = self.decode(words, merge_output, frames_padding_mask, words_padding_mask)
-        return decoder_output, glosses_prob_output, encoder_output, emo_prob_output, merge_output
+        return decoder_output, glosses_prob_output, encoder_output, features_prob_output, merge_output
 
