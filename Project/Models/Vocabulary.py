@@ -5,6 +5,7 @@ from torchtext import vocab
 import gzip
 import os
 import pickle
+import numpy as np
 
 PAD_TOKEN = "<pad>"
 BOS_TOKEN = "<bos>"
@@ -14,10 +15,11 @@ SIL_TOKEN = "<sil>"
 
 
 class GlossVocabulary(vocab.Vocab):
-    def __init__(self, root):
+    def __init__(self, root, based_tags=False):
         self.root = root
         self.specials_tokens = [SIL_TOKEN, UNK_TOKEN, PAD_TOKEN]
-        vocabulary = build_vocab_from_data(root, "gloss", specials=self.specials_tokens)
+        vocabulary = build_gloss_vocab_from_tagging(root, specials=self.specials_tokens) if based_tags \
+            else build_vocab_from_data(root, "gloss", specials=self.specials_tokens)
         super().__init__(vocabulary)
 
     def idx_to_seq(self, idx_list):
@@ -60,8 +62,48 @@ def build_vocab_from_data(root, key, specials, min_freq=1) -> vocab.Vocab:
                 tmp = sample[key].strip().split(' ')
                 if len(tmp) > 400:
                     continue
-                # tmp = [g for t in tmp for g in t.split("+")]
                 counter.update(tmp)
+
+    ordered_dict = OrderedDict(sorted(counter.items(), key=lambda x: (-x[1], x[0])))
+    vocabulary = vocab.vocab(ordered_dict, min_freq=min_freq, specials=specials, special_first=True)
+    vocabulary.set_default_index(vocabulary.get_stoi()[UNK_TOKEN])
+    torch.save(vocabulary, path)
+    return vocabulary
+
+
+def build_gloss_vocab_from_tagging(root, specials, min_freq=1) -> vocab.Vocab:
+    path = os.path.join("Data", "models", "gloss_based_tags_vocabulary")
+    if os.path.exists(path):
+        print(f"Getting existing vocabulary: glosses from tags")
+        return torch.load(path)
+    tags_path = f"Data/models/glosses_tags.npy"
+    if not os.path.exists(tags_path):
+        print("Cannot build gloss vocab from tags: tags files does not exist. Build vocab from data.")
+        return build_vocab_from_data(root, "gloss", specials, min_freq=1)
+    tags = np.load(tags_path, allow_pickle=True).item()
+    counter = Counter()
+    source_list = ["phoenix14t.pami0.train"]
+
+    for name in source_list:
+        with gzip.open(os.path.join(root, name), "rb") as f:
+            loaded_object = pickle.load(f)
+            for sample in loaded_object:
+                if sample['sign'].shape[0] > 400:
+                    continue
+
+                glosses = []
+                for g in sample["gloss"].strip().split(' '):
+                    if g in tags.keys() or '-' not in g:
+                        glosses.append(g)
+                    else:
+                        if any(gloss_split in tags.keys() for gloss_split in g.split('-')):
+                            glosses.extend(g.split('-'))
+                        else:
+                            glosses.append(g)
+                if len(glosses) > 400:
+                    continue
+
+                counter.update(glosses)
 
     ordered_dict = OrderedDict(sorted(counter.items(), key=lambda x: (-x[1], x[0])))
     vocabulary = vocab.vocab(ordered_dict, min_freq=min_freq, specials=specials, special_first=True)

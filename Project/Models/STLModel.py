@@ -62,7 +62,7 @@ class SLTModel(nn.Module):
         glosses_scores_output = self.gloss_output_layer(encoder_output)
         glosses_probs_outputs = glosses_scores_output.log_softmax(dim=-1)
         decoder_output = self.decode(words, encoder_output, frames_padding_mask, words_padding_mask)
-        return decoder_output, glosses_probs_outputs, encoder_output
+        return decoder_output, glosses_probs_outputs, glosses_scores_output, encoder_output
 
 
 class SLTEfeaturesModel(SLTModel):

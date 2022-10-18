@@ -28,6 +28,7 @@ class SignGlossLanguage(VisionDataset):
                  gloss_vocab: Vocabulary,
                  word_vocab: Vocabulary,
                  type: str = "train",
+                 based_tags: bool = False,
                  download: bool = False,
                  original_frames: bool = False,
                  transform: Optional[Callable] = None,
@@ -41,6 +42,7 @@ class SignGlossLanguage(VisionDataset):
         super().__init__(root, transform=transform, target_transform=target_transform)
         self.root = root
         self.type = type
+        self.based_tags = based_tags
         self.original_frames = original_frames
         self.frame_size = 260 * 210 if self.original_frames else 1024
         self.num_of_channels = 3 if self.original_frames else 1
@@ -151,17 +153,7 @@ class SignGlossLanguage(VisionDataset):
         return article_data_exist & video_data_exist
 
     def _parser_data(self, gloss_vocab, word_vocab):
-        path = os.path.join("Data", "models", f"{self.type}_dataset")
-        if os.path.exists(path):
-            print(f"Getting existing dataset: {path}")
-            samples = torch.load(path)
-            self.max_glosses = samples[0]['glosses'].size()
-            self.max_words = samples[0]['words'].size()
-            self.max_signs_frames = max([sample['signs_frames'].size(0) for sample in samples])
-            return samples
-
         samples = {}
-
         with gzip.open(os.path.join(self.root, self.files[self.type]), "rb") as f:
             loaded_object = pickle.load(f)
             for example in loaded_object:
@@ -171,11 +163,23 @@ class SignGlossLanguage(VisionDataset):
                 sign_frames = example["sign"] + 1e-8  # numerical stability
                 if sign_frames.shape[0] > self.max_allowed_frames:
                     continue
-                glosses = [gloss_vocab[g] for g in example["gloss"].strip().split(' ')]
-                # glosses = [gloss_vocab[g] for gloss in glosses for g in gloss.split('+')]
+
+                glosses = []
+                if not self.based_tags:
+                    glosses = [gloss_vocab[g] for g in example["gloss"].strip().split(' ')]
+                else:  # base on tags, need to check if should split to sub glasses
+                    for g in example["gloss"].strip().split(' '):
+                        if g in gloss_vocab or '-' not in g:
+                            glosses.append(gloss_vocab[g])
+                        elif any(gloss_split in gloss_vocab for gloss_split in g.split('-')):
+                            glosses.extend(gloss_vocab[g_split] for g_split in g.split('-'))
+                        else:
+                            glosses.append(gloss_vocab[g])
+
                 words = [word_vocab[Vocabulary.BOS_TOKEN]] + \
                         [word_vocab[w] for w in example["text"].strip().split(' ')] + \
                         [word_vocab[Vocabulary.EOS_TOKEN]]
+
                 samples[video_name] = {"name": video_name,
                                        "singer": example["signer"],
                                        "glosses": torch.tensor(glosses, dtype=torch.int),
